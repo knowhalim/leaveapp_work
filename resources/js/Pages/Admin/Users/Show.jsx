@@ -1,6 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Edit, User } from 'lucide-react';
+import { Edit, User, Users } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 export default function UserShow({ user }) {
@@ -88,6 +88,35 @@ export default function UserShow({ user }) {
                                     <dd className="mt-1 text-sm text-gray-900">{user.employee.phone || 'Not specified'}</dd>
                                 </div>
                             </dl>
+                        </div>
+                    </div>
+                )}
+
+                {/* Supervisors */}
+                {user.employee?.supervisors && user.employee.supervisors.length > 0 && (
+                    <div className="bg-white shadow rounded-lg">
+                        <div className="px-4 py-5 sm:px-6 border-b border-gray-200 flex items-center gap-2">
+                            <Users className="h-5 w-5 text-indigo-600" />
+                            <h3 className="text-lg font-medium text-gray-900">Supervisors</h3>
+                        </div>
+                        <div className="p-6">
+                            <div className="space-y-3">
+                                {user.employee.supervisors.map((sup) => (
+                                    <div key={sup.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium text-gray-900">{sup.user?.name}</span>
+                                                {sup.pivot?.is_primary ? (
+                                                    <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">Primary</span>
+                                                ) : null}
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                                {sup.user?.role?.replace('_', ' ')} {sup.department?.name ? `· ${sup.department.name}` : ''}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 )}

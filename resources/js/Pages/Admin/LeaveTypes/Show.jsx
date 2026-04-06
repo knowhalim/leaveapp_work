@@ -66,6 +66,12 @@ export default function LeaveTypeShow({ leaveType }) {
                                 </dd>
                             </div>
                             <div>
+                                <dt className="text-sm font-medium text-gray-500">Max Backdate Days</dt>
+                                <dd className="mt-1 text-sm text-gray-900">
+                                    {leaveType.max_backdate_days ? `${leaveType.max_backdate_days} days` : 'Not allowed'}
+                                </dd>
+                            </div>
+                            <div>
                                 <dt className="text-sm font-medium text-gray-500">Status</dt>
                                 <dd className="mt-1">
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${leaveType.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

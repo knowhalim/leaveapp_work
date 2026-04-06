@@ -15,8 +15,8 @@ class LeaveTypeController extends Controller
     public function index()
     {
         $leaveTypes = LeaveType::with('allowances.employeeType')
-            ->latest()
-            ->paginate(15);
+            ->orderBy('name')
+            ->paginate(100);
 
         return Inertia::render('Admin/LeaveTypes/Index', [
             'leaveTypes' => $leaveTypes,
@@ -41,6 +41,7 @@ class LeaveTypeController extends Controller
             'is_paid' => ['boolean'],
             'requires_attachment' => ['boolean'],
             'allows_half_day' => ['boolean'],
+            'max_backdate_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'is_active' => ['boolean'],
             'allowances' => ['nullable', 'array'],
             'allowances.*.employee_type_id' => ['required', 'exists:employee_types,id'],
@@ -57,6 +58,7 @@ class LeaveTypeController extends Controller
                 'is_paid' => $validated['is_paid'] ?? true,
                 'requires_attachment' => $validated['requires_attachment'] ?? false,
                 'allows_half_day' => $validated['allows_half_day'] ?? true,
+                'max_backdate_days' => $validated['max_backdate_days'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,
             ]);
 
@@ -107,6 +109,7 @@ class LeaveTypeController extends Controller
             'is_paid' => ['boolean'],
             'requires_attachment' => ['boolean'],
             'allows_half_day' => ['boolean'],
+            'max_backdate_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'is_active' => ['boolean'],
             'allowances' => ['nullable', 'array'],
             'allowances.*.employee_type_id' => ['required', 'exists:employee_types,id'],
@@ -123,6 +126,7 @@ class LeaveTypeController extends Controller
                 'is_paid' => $validated['is_paid'] ?? true,
                 'requires_attachment' => $validated['requires_attachment'] ?? false,
                 'allows_half_day' => $validated['allows_half_day'] ?? true,
+                'max_backdate_days' => $validated['max_backdate_days'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,
             ]);
 

@@ -22,8 +22,17 @@ class SettingsController extends Controller
             'leave_year_start_month' => SystemSetting::get('leave_year_start_month', 1),
         ];
 
+        $apiTokens = [];
+        if (auth()->user()->isSuperAdmin()) {
+            $apiTokens = auth()->user()->tokens()
+                ->select(['id', 'name', 'last_used_at', 'created_at'])
+                ->latest()
+                ->get();
+        }
+
         return Inertia::render('Admin/Settings/Index', [
             'settings' => $settings,
+            'apiTokens' => $apiTokens,
         ]);
     }
 
@@ -207,6 +216,241 @@ class SettingsController extends Controller
         return back()->with('success', 'Email settings updated successfully.');
     }
 
+    public function generateApiToken(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+        ]);
+
+        $token = auth()->user()->createToken($validated['name']);
+
+        ActivityLog::log('settings.api_token_created', null, ['token_name' => $validated['name']]);
+
+        return back()->with('api_token', $token->plainTextToken);
+    }
+
+    public function revokeApiToken(int $tokenId)
+    {
+        auth()->user()->tokens()->where('id', $tokenId)->delete();
+
+        ActivityLog::log('settings.api_token_revoked', null, ['token_id' => $tokenId]);
+
+        return back()->with('success', 'API token revoked.');
+    }
+
+    public function scheduledTasks()
+    {
+        $settings = [
+            'cron_monthly_report_enabled' => SystemSetting::get('cron_monthly_report_enabled', false),
+            'cron_monthly_report_day' => SystemSetting::get('cron_monthly_report_day', 1),
+            'cron_backup_enabled' => SystemSetting::get('cron_backup_enabled', false),
+            'cron_backup_time' => SystemSetting::get('cron_backup_time', '02:00'),
+            'cron_backup_retention_days' => SystemSetting::get('cron_backup_retention_days', 30),
+            'google_drive_enabled' => SystemSetting::get('google_drive_enabled', false),
+            'google_client_id' => SystemSetting::get('google_client_id', ''),
+            'google_client_secret' => SystemSetting::get('google_client_secret', ''),
+            'google_drive_folder_id' => SystemSetting::get('google_drive_folder_id', ''),
+            'google_drive_connected_email' => SystemSetting::get('google_drive_connected_email', ''),
+            'google_drive_connected' => !empty(SystemSetting::get('google_refresh_token', '')),
+        ];
+
+        // List existing backup files
+        $backupDir = storage_path('app/backups');
+        $backups = [];
+        if (is_dir($backupDir)) {
+            $files = glob($backupDir . '/backup-*.zip');
+            rsort($files);
+            foreach (array_slice($files, 0, 10) as $file) {
+                $backups[] = [
+                    'name' => basename($file),
+                    'size' => round(filesize($file) / 1024 / 1024, 2) . ' MB',
+                    'created_at' => date('Y-m-d H:i:s', filemtime($file)),
+                ];
+            }
+        }
+
+        return Inertia::render('Admin/Settings/ScheduledTasks', [
+            'settings' => $settings,
+            'backups' => $backups,
+        ]);
+    }
+
+    public function updateScheduledTasks(Request $request)
+    {
+        $validated = $request->validate([
+            'cron_monthly_report_enabled' => ['boolean'],
+            'cron_monthly_report_day' => ['required', 'integer', 'min:1', 'max:28'],
+            'cron_backup_enabled' => ['boolean'],
+            'cron_backup_time' => ['required', 'string', 'regex:/^\d{2}:\d{2}$/'],
+            'cron_backup_retention_days' => ['required', 'integer', 'min:1', 'max:365'],
+            'google_drive_enabled' => ['boolean'],
+            'google_client_id' => ['nullable', 'string', 'max:255'],
+            'google_client_secret' => ['nullable', 'string', 'max:255'],
+            'google_drive_folder_id' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        SystemSetting::set('cron_monthly_report_enabled', $validated['cron_monthly_report_enabled'] ?? false, 'boolean', 'cron');
+        SystemSetting::set('cron_monthly_report_day', $validated['cron_monthly_report_day'], 'integer', 'cron');
+        SystemSetting::set('cron_backup_enabled', $validated['cron_backup_enabled'] ?? false, 'boolean', 'cron');
+        SystemSetting::set('cron_backup_time', $validated['cron_backup_time'], 'string', 'cron');
+        SystemSetting::set('cron_backup_retention_days', $validated['cron_backup_retention_days'], 'integer', 'cron');
+        SystemSetting::set('google_drive_enabled', $validated['google_drive_enabled'] ?? false, 'boolean', 'google');
+        SystemSetting::set('google_client_id', $validated['google_client_id'] ?? '', 'string', 'google');
+        SystemSetting::set('google_client_secret', $validated['google_client_secret'] ?? '', 'string', 'google');
+        SystemSetting::set('google_drive_folder_id', $validated['google_drive_folder_id'] ?? '', 'string', 'google');
+
+        ActivityLog::log('settings.cron_updated', null, $validated);
+
+        return back()->with('success', 'Scheduled task settings updated.');
+    }
+
+    public function deleteBackup(string $filename)
+    {
+        if (!preg_match('/^backup-[\d\-]+\.zip$/', $filename)) {
+            abort(404);
+        }
+
+        $path = storage_path('app/backups/' . $filename);
+
+        if (!file_exists($path)) {
+            return back()->with('error', 'Backup file not found.');
+        }
+
+        unlink($path);
+
+        ActivityLog::log('settings.backup_deleted', null, ['filename' => $filename]);
+
+        return back()->with('success', "Backup {$filename} deleted.");
+    }
+
+    public function downloadBackup(string $filename)
+    {
+        if (!preg_match('/^backup-[\d\-]+\.zip$/', $filename)) {
+            abort(404);
+        }
+
+        $path = storage_path('app/backups/' . $filename);
+
+        if (!file_exists($path)) {
+            abort(404);
+        }
+
+        // Stream directly to avoid middleware/output-buffer conflicts
+        return response()->streamDownload(function () use ($path) {
+            $fp = fopen($path, 'rb');
+            while (!feof($fp)) {
+                echo fread($fp, 8192);
+                flush();
+            }
+            fclose($fp);
+        }, $filename, [
+            'Content-Type'   => 'application/zip',
+            'Content-Length' => filesize($path),
+        ]);
+    }
+
+    public function listGoogleDriveBackups()
+    {
+        try {
+            $drive   = new \App\Services\GoogleDriveService();
+            $backups = $drive->listBackups();
+            return response()->json($backups);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function restore(Request $request)
+    {
+        $validated = $request->validate([
+            'source'   => ['required', 'in:local,google'],
+            'filename' => ['required', 'string', 'max:255'],
+        ]);
+
+        $zipPath = null;
+        $tmpFile = false;
+
+        if ($validated['source'] === 'local') {
+            if (!preg_match('/^backup-[\d\-]+\.zip$/', $validated['filename'])) {
+                return back()->with('error', 'Invalid backup filename.');
+            }
+            $zipPath = storage_path('app/backups/' . $validated['filename']);
+            if (!file_exists($zipPath)) {
+                return back()->with('error', 'Backup file not found on server.');
+            }
+        } else {
+            // Download from Google Drive to temp
+            try {
+                $drive   = new \App\Services\GoogleDriveService();
+                $zipPath = $drive->downloadToTemp($validated['filename']); // filename = fileId for Drive
+                $tmpFile = true;
+            } catch (\Exception $e) {
+                return back()->with('error', 'Failed to download from Google Drive: ' . $e->getMessage());
+            }
+        }
+
+        \Artisan::call('app:restore-backup', ['zipPath' => $zipPath]);
+
+        if ($tmpFile && file_exists($zipPath)) {
+            unlink($zipPath);
+        }
+
+        ActivityLog::log('settings.backup_restored', null, [
+            'source'   => $validated['source'],
+            'filename' => $validated['filename'],
+        ]);
+
+        return back()->with('success', 'Backup restored successfully. Please verify the application is working correctly.');
+    }
+
+    public function uploadBackup(Request $request)
+    {
+        $request->validate([
+            'backup_file' => ['required', 'file', 'mimes:zip', 'max:102400'],
+        ]);
+
+        $file = $request->file('backup_file');
+        $original = $file->getClientOriginalName();
+
+        $filename = preg_match('/^backup-[\d\-]+\.zip$/', $original)
+            ? $original
+            : 'backup-' . now()->format('Y-m-d-H-i-s') . '.zip';
+
+        $backupDir = storage_path('app/backups');
+        if (!is_dir($backupDir)) {
+            mkdir($backupDir, 0775, true);
+        }
+
+        $file->move($backupDir, $filename);
+
+        ActivityLog::log('settings.backup_uploaded', null, ['filename' => $filename]);
+
+        return back()->with('success', "Backup '{$filename}' uploaded successfully.");
+    }
+
+    public function runBackupNow()
+    {
+        \Artisan::call('app:backup-database', ['--force' => true]);
+        return back()->with('success', 'Backup complete. The file is now in the list below.');
+    }
+
+    public function exportDatabase()
+    {
+        $dbPath = database_path('database.sqlite');
+
+        if (!file_exists($dbPath)) {
+            return back()->with('error', 'Database file not found.');
+        }
+
+        ActivityLog::log('settings.database_exported', null);
+
+        $filename = 'database-' . now()->format('Y-m-d-H-i-s') . '.sqlite';
+
+        return response()->download($dbPath, $filename, [
+            'Content-Type' => 'application/octet-stream',
+        ]);
+    }
+
     public function testEmail(Request $request)
     {
         try {
@@ -217,9 +461,9 @@ class SettingsController extends Controller
             // Configure mail settings from database (with .env fallback)
             $this->configureMailFromSettings();
 
-            Mail::raw('This is a test email from ' . SystemSetting::get('company_name', 'HR Leave System') . '. If you received this email, your email configuration is working correctly.', function ($message) use ($validated) {
+            Mail::raw('This is a test email from ' . SystemSetting::getCompanyName() . '. If you received this email, your email configuration is working correctly.', function ($message) use ($validated) {
                 $message->to($validated['test_email'])
-                    ->subject('Test Email - HR Leave System');
+                    ->subject('Test Email - ' . SystemSetting::getCompanyName());
             });
 
             return response()->json([
@@ -263,7 +507,7 @@ class SettingsController extends Controller
             'mail.mailers.smtp.password' => SystemSetting::get('mail_password', config('mail.mailers.smtp.password', '')),
             'mail.mailers.smtp.scheme' => $scheme,
             'mail.from.address' => SystemSetting::get('mail_from_address', config('mail.from.address', 'noreply@example.com')),
-            'mail.from.name' => SystemSetting::get('mail_from_name', config('mail.from.name', config('app.name'))),
+            'mail.from.name' => SystemSetting::getCompanyName(),
         ]);
 
         // Purge cached mailer instances so new config takes effect

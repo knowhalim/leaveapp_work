@@ -3,7 +3,7 @@
 #####################################################################
 # Simple HR Leave System - Server Setup Script
 #
-# This script sets up a fresh Ubuntu server (18.04, 20.04, 22.04, 24.04)
+# This script sets up a fresh Ubuntu server (20.04, 22.04, 24.04)
 # with all dependencies needed to run the HR Leave Management System.
 #
 # Usage:
@@ -29,7 +29,9 @@ APP_NAME="simplehrleave"
 APP_DIR="/var/www/${APP_NAME}"
 REPO_URL="https://github.com/knowhalim/simplehrleave.git"
 DOMAIN="_"  # Use "_" for default server block, or set your domain
-PHP_VERSION="8.3"
+
+# PHP 8.4 is required - composer.lock has Symfony 8.x packages that need PHP >=8.4
+PHP_VERSION="8.4"
 
 # Functions
 print_header() {
@@ -79,11 +81,41 @@ detect_ubuntu_version() {
     fi
 }
 
+# Fix locale to prevent perl/locale warnings
+fix_locale() {
+    print_header "Fixing Locale Settings"
+    locale-gen en_US.UTF-8 || true
+    update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 || true
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+    print_success "Locale configured"
+}
+
+# Add swap (safety net for low-memory VPS)
+setup_swap() {
+    print_header "Setting Up Swap Space"
+
+    if [ -f /swapfile2g ]; then
+        print_info "Swap file already exists, skipping"
+        return
+    fi
+
+    # Add 2GB swap for safety during composer/npm builds
+    fallocate -l 2G /swapfile2g
+    chmod 600 /swapfile2g
+    mkswap /swapfile2g
+    swapon /swapfile2g
+    echo '/swapfile2g none swap sw 0 0' >> /etc/fstab
+
+    print_success "2GB swap file created (prevents out-of-memory during builds)"
+}
+
 # Update system packages
 update_system() {
     print_header "Updating System Packages"
     apt-get update -y
-    apt-get upgrade -y
+    # Use --force-confdef to keep existing configs and avoid interactive prompts
+    apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
     print_success "System packages updated"
 }
 
@@ -121,7 +153,6 @@ install_php() {
         php${PHP_VERSION}-common \
         php${PHP_VERSION}-mysql \
         php${PHP_VERSION}-sqlite3 \
-        php${PHP_VERSION}-pgsql \
         php${PHP_VERSION}-zip \
         php${PHP_VERSION}-gd \
         php${PHP_VERSION}-mbstring \
@@ -130,11 +161,10 @@ install_php() {
         php${PHP_VERSION}-bcmath \
         php${PHP_VERSION}-intl \
         php${PHP_VERSION}-readline \
-        php${PHP_VERSION}-opcache \
-        php${PHP_VERSION}-tokenizer \
-        php${PHP_VERSION}-fileinfo \
-        php${PHP_VERSION}-dom \
-        php${PHP_VERSION}-redis
+        php${PHP_VERSION}-opcache
+
+    # Ensure this PHP version is the default CLI
+    update-alternatives --set php /usr/bin/php${PHP_VERSION} 2>/dev/null || true
 
     # Configure PHP-FPM
     sed -i "s/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/" /etc/php/${PHP_VERSION}/fpm/php.ini
@@ -154,6 +184,9 @@ install_php() {
 install_composer() {
     print_header "Installing Composer"
 
+    # Allow composer to run as root without warnings
+    export COMPOSER_ALLOW_SUPERUSER=1
+
     if command -v composer &> /dev/null; then
         print_info "Composer already installed, updating..."
         composer self-update
@@ -163,19 +196,21 @@ install_composer() {
         chmod +x /usr/local/bin/composer
     fi
 
-    print_success "Composer installed: $(composer --version)"
+    print_success "Composer installed: $(composer --version 2>/dev/null | head -1)"
 }
 
 # Install Node.js and npm
 install_nodejs() {
     print_header "Installing Node.js"
 
+    if command -v node &> /dev/null; then
+        print_info "Node.js already installed: $(node -v)"
+        return
+    fi
+
     # Install Node.js LTS (v20.x)
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
-
-    # Install npm globally
-    npm install -g npm@latest
 
     print_success "Node.js installed: $(node --version)"
     print_success "npm installed: $(npm --version)"
@@ -224,6 +259,9 @@ install_mysql() {
 setup_application() {
     print_header "Setting Up Application"
 
+    # Allow composer to run as root
+    export COMPOSER_ALLOW_SUPERUSER=1
+
     # Create web directory if it doesn't exist
     mkdir -p /var/www
 
@@ -238,7 +276,7 @@ setup_application() {
         cd $APP_DIR
     fi
 
-    # Install PHP dependencies
+    # Install PHP dependencies (as root with COMPOSER_ALLOW_SUPERUSER)
     print_info "Installing PHP dependencies..."
     composer install --no-dev --optimize-autoloader --no-interaction
 
@@ -255,25 +293,42 @@ setup_application() {
         print_info "Created .env file from .env.example"
     fi
 
+    # Set admin credentials in .env for the seeder
+    echo "" >> .env
+    echo "ADMIN_NAME=\"${ADMIN_NAME}\"" >> .env
+    echo "ADMIN_EMAIL=${ADMIN_EMAIL}" >> .env
+    echo "ADMIN_PASSWORD=\"${ADMIN_PASSWORD}\"" >> .env
+
     # Generate application key
     php artisan key:generate --force
 
     # Create SQLite database
     touch database/database.sqlite
 
+    # Set ownership AFTER composer/npm (they create files as root)
+    # Must be done before migrations so www-data can write to SQLite
+    chown -R www-data:www-data $APP_DIR
+    chmod -R 755 $APP_DIR
+    chmod -R 775 $APP_DIR/storage $APP_DIR/bootstrap/cache $APP_DIR/database
+
     # Run migrations
-    php artisan migrate --force
+    sudo -u www-data php artisan migrate --force
 
     # Seed database with default data
-    php artisan db:seed --force
+    sudo -u www-data php artisan db:seed --force
 
-    # Create storage link
-    php artisan storage:link
+    # Create storage link (--force overwrites if exists)
+    php artisan storage:link --force 2>/dev/null || php artisan storage:link 2>/dev/null || true
+
+    # Remove admin credentials from .env after seeding (security)
+    sed -i '/^ADMIN_NAME=/d' .env
+    sed -i '/^ADMIN_EMAIL=/d' .env
+    sed -i '/^ADMIN_PASSWORD=/d' .env
 
     # Clear and cache
-    php artisan config:cache
-    php artisan route:cache
-    php artisan view:cache
+    sudo -u www-data php artisan config:cache
+    sudo -u www-data php artisan route:cache
+    sudo -u www-data php artisan view:cache
 
     print_success "Application setup complete"
 }
@@ -297,6 +352,7 @@ set_permissions() {
     # Set writable permissions for storage and cache
     chmod -R 775 $APP_DIR/storage
     chmod -R 775 $APP_DIR/bootstrap/cache
+    chmod -R 775 $APP_DIR/database
 
     # Set ACL for storage directories
     setfacl -R -m u:www-data:rwX $APP_DIR/storage
@@ -311,8 +367,8 @@ set_permissions() {
 configure_nginx() {
     print_header "Configuring Nginx"
 
-    # Create Nginx server block
-    cat > /etc/nginx/sites-available/${APP_NAME} << 'NGINX_CONFIG'
+    # Create Nginx server block using the correct PHP version
+    cat > /etc/nginx/sites-available/${APP_NAME} << NGINX_CONFIG
 server {
     listen 80;
     listen [::]:80;
@@ -342,13 +398,13 @@ server {
     gzip_types text/plain text/css text/xml application/json application/javascript application/xml+rss application/atom+xml image/svg+xml;
 
     location / {
-        try_files $uri $uri/ /index.php?$query_string;
+        try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
-    # PHP-FPM configuration
-    location ~ \.php$ {
-        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+    # PHP-FPM configuration - uses PHP ${PHP_VERSION}
+    location ~ \.php\$ {
+        fastcgi_pass unix:/var/run/php/php${PHP_VERSION}-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         include fastcgi_params;
         fastcgi_hide_header X-Powered-By;
         fastcgi_read_timeout 300;
@@ -360,15 +416,12 @@ server {
     }
 
     # Cache static files
-    location ~* \.(jpg|jpeg|png|gif|ico|css|js|pdf|txt|woff|woff2|ttf|svg|eot)$ {
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|pdf|txt|woff|woff2|ttf|svg|eot)\$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
     }
 }
 NGINX_CONFIG
-
-    # Update PHP-FPM socket path based on installed version
-    sed -i "s/php8.3-fpm.sock/php${PHP_VERSION}-fpm.sock/" /etc/nginx/sites-available/${APP_NAME}
 
     # Enable site
     ln -sf /etc/nginx/sites-available/${APP_NAME} /etc/nginx/sites-enabled/
@@ -418,7 +471,8 @@ setup_cron() {
     print_header "Setting Up Cron Jobs"
 
     # Add Laravel scheduler cron job
-    (crontab -l 2>/dev/null | grep -v "${APP_DIR}/artisan schedule:run"; echo "* * * * * cd ${APP_DIR} && php artisan schedule:run >> /dev/null 2>&1") | crontab -
+    touch /var/log/laravel-scheduler.log && chmod 664 /var/log/laravel-scheduler.log || true
+    (crontab -l 2>/dev/null | grep -v "${APP_DIR}/artisan schedule:run"; echo "* * * * * sudo -u www-data bash -c \"cd ${APP_DIR} && php artisan schedule:run\" >> /var/log/laravel-scheduler.log 2>&1") | crontab -
 
     print_success "Cron jobs configured"
 }
@@ -444,7 +498,7 @@ SUPERVISOR_CONFIG
 
     supervisorctl reread
     supervisorctl update
-    supervisorctl start ${APP_NAME}-worker:*
+    supervisorctl start ${APP_NAME}-worker:* 2>/dev/null || true
 
     print_success "Supervisor queue worker configured"
 }
@@ -463,9 +517,9 @@ display_final_info() {
     echo -e "Application URL: ${BLUE}http://${SERVER_IP}${NC}"
     echo -e "Application Directory: ${BLUE}${APP_DIR}${NC}"
     echo ""
-    echo -e "${YELLOW}Default Login Credentials:${NC}"
-    echo -e "  Email: ${BLUE}superadmin@hrleave.com${NC}"
-    echo -e "  Password: ${BLUE}password${NC}"
+    echo -e "${YELLOW}Login Credentials:${NC}"
+    echo -e "  Email: ${BLUE}${ADMIN_EMAIL}${NC}"
+    echo -e "  Password: ${BLUE}(the password you entered during setup)${NC}"
     echo ""
     echo -e "${YELLOW}Important Next Steps:${NC}"
     echo "  1. Update the .env file with your settings:"
@@ -505,6 +559,7 @@ main() {
     echo "  - SQLite (default) / MySQL (optional)"
     echo "  - Supervisor"
     echo "  - UFW Firewall"
+    echo "  - 2GB swap (safety net for low-memory VPS)"
     echo ""
     read -p "Do you want to continue? (y/n) " -n 1 -r
     echo ""
@@ -514,7 +569,35 @@ main() {
         exit 1
     fi
 
+    # Prompt for super admin account
+    echo ""
+    print_header "Super Admin Account Setup"
+    read -p "Admin name [Super Admin]: " ADMIN_NAME
+    ADMIN_NAME=${ADMIN_NAME:-Super Admin}
+    read -p "Admin email: " ADMIN_EMAIL
+    while [ -z "$ADMIN_EMAIL" ]; do
+        print_error "Email is required."
+        read -p "Admin email: " ADMIN_EMAIL
+    done
+    while true; do
+        read -s -p "Admin password (min 8 chars): " ADMIN_PASSWORD
+        echo ""
+        if [ ${#ADMIN_PASSWORD} -lt 8 ]; then
+            print_error "Password must be at least 8 characters."
+            continue
+        fi
+        read -s -p "Confirm password: " ADMIN_PASSWORD_CONFIRM
+        echo ""
+        if [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD_CONFIRM" ]; then
+            print_error "Passwords do not match. Try again."
+            continue
+        fi
+        break
+    done
+
     # Run installation steps
+    fix_locale
+    setup_swap
     update_system
     install_basic_deps
     install_php

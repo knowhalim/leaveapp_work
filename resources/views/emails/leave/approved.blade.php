@@ -52,7 +52,7 @@
             <a href="{{ url('/leaves/' . $leaveRequest->id) }}" style="background-color: #059669; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">View Details</a>
         </div>
 
-        <p style="color: #6b7280; font-size: 14px;">This is an automated message from the HR Leave System.</p>
+        <p style="color: #6b7280; font-size: 14px;">This is an automated message from {{ \App\Models\SystemSetting::getCompanyName() }}.</p>
     </div>
 </body>
 </html>

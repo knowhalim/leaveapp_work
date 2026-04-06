@@ -13,6 +13,7 @@ export default function LeaveTypeEdit({ leaveType, employeeTypes }) {
         is_paid: leaveType.is_paid,
         requires_attachment: leaveType.requires_attachment,
         allows_half_day: leaveType.allows_half_day,
+        max_backdate_days: leaveType.max_backdate_days || 0,
         is_active: leaveType.is_active,
         allowances: employeeTypes.map(et => {
             const existing = existingAllowances.find(a => a.employee_type_id === et.id);
@@ -154,6 +155,21 @@ export default function LeaveTypeEdit({ leaveType, employeeTypes }) {
                                 />
                                 <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700">Active</label>
                             </div>
+                        </div>
+
+                        {/* Max Backdate Days */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Max Backdate Days</label>
+                            <input
+                                type="number"
+                                value={data.max_backdate_days}
+                                onChange={(e) => setData('max_backdate_days', parseInt(e.target.value) || 0)}
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                min={0}
+                                max={365}
+                            />
+                            <p className="mt-1 text-sm text-gray-500">Number of days in the past employees can apply for. 0 = no backdating.</p>
+                            {errors.max_backdate_days && <p className="mt-1 text-sm text-red-600">{errors.max_backdate_days}</p>}
                         </div>
 
                         {/* Allowances by Employee Type */}

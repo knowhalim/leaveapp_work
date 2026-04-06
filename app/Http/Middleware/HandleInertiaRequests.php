@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\SystemSetting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -18,6 +19,7 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             ...parent::share($request),
+            'company_name' => fn () => SystemSetting::getCompanyName(),
             'auth' => [
                 'user' => $request->user() ? [
                     'id' => $request->user()->id,
@@ -31,6 +33,10 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
                 'message' => fn () => $request->session()->get('message'),
+                'import_errors' => fn () => $request->session()->get('import_errors'),
+                'import_success_count' => fn () => $request->session()->get('import_success_count'),
+                'magic_link_sent' => fn () => $request->session()->get('magic_link_sent'),
+                'api_token' => fn () => $request->session()->get('api_token'),
             ],
         ];
     }

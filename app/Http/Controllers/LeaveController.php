@@ -32,7 +32,13 @@ class LeaveController extends Controller
         if (!$user->isAdmin()) {
             if ($user->isManager()) {
                 $managedDepartmentIds = $user->managedDepartments()->pluck('id');
-                $teamEmployeeIds = Employee::whereIn('department_id', $managedDepartmentIds)->pluck('id');
+                $subordinateIds = $user->employee
+                    ? $user->employee->subordinates()->pluck('employees.id')
+                    : collect();
+                $teamEmployeeIds = Employee::where(function ($q) use ($managedDepartmentIds, $subordinateIds) {
+                    $q->whereIn('department_id', $managedDepartmentIds)
+                        ->orWhereIn('id', $subordinateIds);
+                })->pluck('id');
                 $query->whereIn('employee_id', $teamEmployeeIds);
             } else {
                 $query->where('employee_id', $user->employee?->id);
@@ -83,9 +89,12 @@ class LeaveController extends Controller
 
     public function store(Request $request)
     {
+        $leaveType = LeaveType::findOrFail($request->leave_type_id);
+        $minDate = now()->subDays($leaveType->max_backdate_days ?? 0)->format('Y-m-d');
+
         $validated = $request->validate([
             'leave_type_id' => ['required', 'exists:leave_types,id'],
-            'start_date' => ['required', 'date', 'after_or_equal:today'],
+            'start_date' => ['required', 'date', 'after_or_equal:' . $minDate],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
             'start_half' => ['required', 'in:full,first_half,second_half'],
             'end_half' => ['required', 'in:full,first_half,second_half'],
@@ -94,7 +103,6 @@ class LeaveController extends Controller
         ]);
 
         $employee = auth()->user()->employee;
-        $leaveType = LeaveType::findOrFail($validated['leave_type_id']);
         $financialYear = SystemSetting::getFinancialYear();
 
         $totalDays = $this->calculationService->calculateLeaveDays(
@@ -300,7 +308,13 @@ class LeaveController extends Controller
 
         if ($user->isManager() && !$user->isAdmin()) {
             $managedDepartmentIds = $user->managedDepartments()->pluck('id');
-            $teamEmployeeIds = Employee::whereIn('department_id', $managedDepartmentIds)->pluck('id');
+            $subordinateIds = $user->employee
+                ? $user->employee->subordinates()->pluck('employees.id')
+                : collect();
+            $teamEmployeeIds = Employee::where(function ($q) use ($managedDepartmentIds, $subordinateIds) {
+                $q->whereIn('department_id', $managedDepartmentIds)
+                    ->orWhereIn('id', $subordinateIds);
+            })->pluck('id');
             $query->whereIn('employee_id', $teamEmployeeIds);
         }
 

@@ -81,7 +81,15 @@ class DashboardController extends Controller
 
         $managedDepartments = $user->managedDepartments()->pluck('id');
 
-        $teamMembers = Employee::whereIn('department_id', $managedDepartments)
+        // Get subordinate IDs from supervisor assignments
+        $subordinateIds = $user->employee
+            ? $user->employee->subordinates()->pluck('employees.id')
+            : collect();
+
+        $teamMembers = Employee::where(function ($q) use ($managedDepartments, $subordinateIds) {
+                $q->whereIn('department_id', $managedDepartments)
+                    ->orWhereIn('id', $subordinateIds);
+            })
             ->with('user')
             ->active()
             ->get();

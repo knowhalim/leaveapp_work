@@ -36,7 +36,7 @@ class EmailService
             'mail.mailers.smtp.password' => SystemSetting::get('mail_password', config('mail.mailers.smtp.password', '')),
             'mail.mailers.smtp.scheme' => $scheme,
             'mail.from.address' => SystemSetting::get('mail_from_address', config('mail.from.address', 'noreply@example.com')),
-            'mail.from.name' => SystemSetting::get('mail_from_name', config('mail.from.name', config('app.name'))),
+            'mail.from.name' => SystemSetting::getCompanyName(),
         ]);
 
         // Purge cached mailer instances so new config takes effect
@@ -70,6 +70,7 @@ class EmailService
         } else {
             // For regular employees, notify their supervisors
             $supervisors = $leaveRequest->employee->supervisors;
+            $notifiedUserIds = [];
 
             foreach ($supervisors as $supervisor) {
                 $this->sendEmail(
@@ -81,11 +82,12 @@ class EmailService
                         'supervisor' => $supervisor,
                     ]
                 );
+                $notifiedUserIds[] = $supervisor->user->id;
             }
 
-            // Also notify department manager (if different from employee)
+            // Also notify department manager (if different from employee and not already notified as supervisor)
             $department = $leaveRequest->employee->department;
-            if ($department && $department->manager && $department->manager->id !== $employeeUser->id) {
+            if ($department && $department->manager && $department->manager->id !== $employeeUser->id && !in_array($department->manager->id, $notifiedUserIds)) {
                 $this->sendEmail(
                     $department->manager->email,
                     'New Leave Request Pending Approval',
@@ -148,11 +150,24 @@ class EmailService
     {
         $this->sendEmail(
             $user->email,
-            'Welcome to HR Leave System',
+            'Welcome to ' . \App\Models\SystemSetting::getCompanyName(),
             'emails.welcome',
             [
                 'user' => $user,
                 'temporaryPassword' => $temporaryPassword,
+            ]
+        );
+    }
+
+    public function sendMagicLinkEmail(User $user, string $token): void
+    {
+        $this->sendEmail(
+            $user->email,
+            'Your Login Link - ' . \App\Models\SystemSetting::getCompanyName(),
+            'emails.magic-link',
+            [
+                'user' => $user,
+                'loginUrl' => url('/magic-link/' . $token),
             ]
         );
     }
@@ -169,6 +184,33 @@ class EmailService
                 'resetUrl' => url('/reset-password?token=' . $token . '&email=' . $user->email),
             ]
         );
+    }
+
+    public function sendReportEmail(User $user, string $csvContent, string $filename, string $reportTypeLabel, string $year): void
+    {
+        if (!$this->isEmailEnabled()) {
+            \Log::info('Email notifications disabled, skipping report email', ['to' => $user->email]);
+            return;
+        }
+
+        try {
+            $this->configureMailFromSettings();
+
+            $html = view('emails.report', [
+                'user'             => $user,
+                'reportTypeLabel'  => $reportTypeLabel,
+                'year'             => $year,
+                'generatedAt'      => now()->format('Y-m-d H:i:s'),
+            ])->render();
+
+            \Illuminate\Support\Facades\Mail::html($html, function ($message) use ($user, $csvContent, $filename, $reportTypeLabel, $year) {
+                $message->to($user->email, $user->name)
+                    ->subject("{$reportTypeLabel} - Financial Year {$year}")
+                    ->attachData($csvContent, $filename, ['mime' => 'text/csv']);
+            });
+        } catch (\Exception $e) {
+            \Log::error("Failed to send report email: {$e->getMessage()}", ['to' => $user->email]);
+        }
     }
 
     protected function sendEmail(string $to, string $subject, string $view, array $data): void

@@ -1,8 +1,15 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Plus, Edit, Trash2, Eye, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export default function UsersIndex({ users, filters }) {
+    const { auth } = usePage().props;
+    const canModify = (user) => {
+        if (auth.user.role !== 'admin') return true;
+        if (user.role === 'super_admin') return false;
+        if (user.role === 'admin' && user.id !== auth.user.id) return false;
+        return true;
+    };
     const handleFilterChange = (key, value) => {
         router.get('/users', { ...filters, [key]: value }, { preserveState: true });
     };
@@ -128,27 +135,33 @@ export default function UsersIndex({ users, filters }) {
                                             >
                                                 <Eye className="h-4 w-4" />
                                             </Link>
-                                            <Link
-                                                href={`/users/${user.id}/edit`}
-                                                className="text-indigo-600 hover:text-indigo-900"
-                                                title="Edit"
-                                            >
-                                                <Edit className="h-4 w-4" />
-                                            </Link>
-                                            <button
-                                                onClick={() => handleToggleStatus(user)}
-                                                className={user.is_active ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'}
-                                                title={user.is_active ? 'Deactivate' : 'Activate'}
-                                            >
-                                                {user.is_active ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(user)}
-                                                className="text-red-600 hover:text-red-900"
-                                                title="Delete"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
+                                            {canModify(user) && (
+                                                <Link
+                                                    href={`/users/${user.id}/edit`}
+                                                    className="text-indigo-600 hover:text-indigo-900"
+                                                    title="Edit"
+                                                >
+                                                    <Edit className="h-4 w-4" />
+                                                </Link>
+                                            )}
+                                            {canModify(user) && (
+                                                <button
+                                                    onClick={() => handleToggleStatus(user)}
+                                                    className={user.is_active ? 'text-yellow-600 hover:text-yellow-900' : 'text-green-600 hover:text-green-900'}
+                                                    title={user.is_active ? 'Deactivate' : 'Activate'}
+                                                >
+                                                    {user.is_active ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
+                                                </button>
+                                            )}
+                                            {canModify(user) && (
+                                                <button
+                                                    onClick={() => handleDelete(user)}
+                                                    className="text-red-600 hover:text-red-900"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

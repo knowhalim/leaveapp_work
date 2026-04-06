@@ -327,7 +327,8 @@ fi
 #######################################
 print_status "Setting up Laravel scheduler..."
 
-(crontab -l 2>/dev/null | grep -v "artisan schedule:run"; echo "* * * * * cd ${INSTALL_DIR} && php artisan schedule:run >> /dev/null 2>&1") | crontab -
+touch /var/log/laravel-scheduler.log && chmod 664 /var/log/laravel-scheduler.log || true
+(crontab -l 2>/dev/null | grep -v "artisan schedule:run"; echo "* * * * * sudo -u www-data bash -c \"cd ${INSTALL_DIR} && php artisan schedule:run\" >> /var/log/laravel-scheduler.log 2>&1") | crontab -
 
 print_success "Laravel scheduler configured"
 

@@ -15,11 +15,13 @@ import {
     Webhook,
     ListPlus,
     Mail,
+    FileUp,
+    User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function AuthenticatedLayout({ children, title }) {
-    const { auth } = usePage().props;
+    const { auth, company_name } = usePage().props;
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -34,6 +36,7 @@ export default function AuthenticatedLayout({ children, title }) {
         { name: 'My Balances', href: '/my-balances', icon: FileText, show: true },
         { name: 'Pending Approvals', href: '/leaves/pending', icon: Bell, show: isManager },
         { name: 'Users', href: '/users', icon: Users, show: isAdmin },
+        { name: 'Batch Import', href: '/users/batch-import', icon: FileUp, show: isManager },
         { name: 'Departments', href: '/departments', icon: Building2, show: isAdmin },
         { name: 'Leave Types', href: '/leave-types', icon: Calendar, show: isAdmin },
         { name: 'Bulk Leave Adjustment', href: '/leave-balances/bulk-adjustment', icon: ListPlus, show: isAdmin },
@@ -57,7 +60,7 @@ export default function AuthenticatedLayout({ children, title }) {
                 <div className="fixed inset-0 bg-gray-900/80" onClick={() => setSidebarOpen(false)} />
                 <div className="fixed inset-y-0 left-0 w-64 bg-white">
                     <div className="flex h-16 items-center justify-between px-6">
-                        <span className="text-xl font-semibold text-gray-900">HR Leave</span>
+                        <span className="text-xl font-semibold text-gray-900">{company_name}</span>
                         <button onClick={() => setSidebarOpen(false)}>
                             <X className="h-6 w-6 text-gray-500" />
                         </button>
@@ -81,7 +84,7 @@ export default function AuthenticatedLayout({ children, title }) {
             <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
                 <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
                     <div className="flex h-16 items-center px-6 border-b border-gray-200">
-                        <span className="text-xl font-semibold text-gray-900">HR Leave System</span>
+                        <span className="text-xl font-semibold text-gray-900">{company_name}</span>
                     </div>
                     <nav className="flex-1 mt-6 px-3 space-y-1">
                         {navigation.map((item) => (
@@ -136,6 +139,13 @@ export default function AuthenticatedLayout({ children, title }) {
                             </button>
                             {userMenuOpen && (
                                 <div className="absolute right-0 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5">
+                                    <Link
+                                        href="/profile"
+                                        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        <User className="h-4 w-4" />
+                                        Profile
+                                    </Link>
                                     <button
                                         onClick={handleLogout}
                                         className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"

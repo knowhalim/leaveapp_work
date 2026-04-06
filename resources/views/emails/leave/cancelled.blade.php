@@ -39,7 +39,7 @@
 
         <p>No further action is required.</p>
 
-        <p style="color: #6b7280; font-size: 14px;">This is an automated message from the HR Leave System.</p>
+        <p style="color: #6b7280; font-size: 14px;">This is an automated message from {{ \App\Models\SystemSetting::getCompanyName() }}.</p>
     </div>
 </body>
 </html>

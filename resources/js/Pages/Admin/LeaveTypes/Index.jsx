@@ -29,7 +29,7 @@ export default function LeaveTypesIndex({ leaveTypes }) {
                 </Link>
             </div>
 
-            <div className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="bg-white shadow rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>
@@ -63,10 +63,10 @@ export default function LeaveTypesIndex({ leaveTypes }) {
                         ) : (
                             leaveTypes.data.map((leaveType) => (
                                 <tr key={leaveType.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-4">
                                         <div className="flex items-center">
                                             <span
-                                                className="w-4 h-4 rounded-full mr-3"
+                                                className="w-4 h-4 rounded-full mr-3 flex-shrink-0"
                                                 style={{ backgroundColor: leaveType.color }}
                                             />
                                             <span className="text-sm font-medium text-gray-900">{leaveType.name}</span>

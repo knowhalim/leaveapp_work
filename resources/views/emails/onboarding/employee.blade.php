@@ -1,4 +1,4 @@
-<p style="margin: 0 0 15px 0;">As an <strong>Employee</strong>, here's what you can do in the HR Leave System:</p>
+<p style="margin: 0 0 15px 0;">As an <strong>Employee</strong>, here's what you can do in {{ \App\Models\SystemSetting::getCompanyName() }}:</p>
 
 <ol style="margin: 0; padding-left: 20px;">
     <li style="margin-bottom: 10px;">

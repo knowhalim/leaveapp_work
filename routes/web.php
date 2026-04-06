@@ -1,12 +1,15 @@
 <?php
 
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\MagicLinkController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\GoogleDriveController;
 use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\MassEmailController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
@@ -24,6 +27,10 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
     Route::get('/forgot-password', [AuthController::class, 'showForgotPassword'])->name('password.request');
     Route::post('/forgot-password', [AuthController::class, 'sendResetLink'])->name('password.email');
+
+    // Magic link
+    Route::post('/magic-link', [MagicLinkController::class, 'send'])->name('magic-link.send');
+    Route::get('/magic-link/{token}', [MagicLinkController::class, 'authenticate'])->name('magic-link.authenticate');
 });
 
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
@@ -57,6 +64,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         };
     })->name('dashboard');
 
+    // Profile routes (all authenticated users)
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.update-password');
+
     // Leave routes (all authenticated users)
     Route::prefix('leaves')->name('leaves.')->group(function () {
         Route::get('/', [LeaveController::class, 'index'])->name('index');
@@ -73,6 +85,12 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     // My Leave Balances (employees)
     Route::get('/my-balances', [LeaveBalanceController::class, 'myBalances'])->name('my-balances');
+
+    // Batch import (accessible by managers too)
+    Route::middleware('role:super_admin,admin,manager')->group(function () {
+        Route::get('/users/batch-import', [UserController::class, 'batchImport'])->name('users.batch-import');
+        Route::post('/users/batch-import', [UserController::class, 'processBatchImport'])->name('users.batch-import.process');
+    });
 
     // Admin routes
     Route::middleware('role:super_admin,admin')->group(function () {
@@ -119,11 +137,27 @@ Route::middleware(['auth', 'active'])->group(function () {
 
         });
 
-        // Email Settings (Super Admin only)
+        // Email Settings, DB Export, API Tokens, Scheduled Tasks (Super Admin only)
         Route::middleware('role:super_admin')->prefix('settings')->name('settings.')->group(function () {
             Route::get('/email', [SettingsController::class, 'email'])->name('email');
             Route::post('/email', [SettingsController::class, 'updateEmail'])->name('email.update');
             Route::post('/email/test', [SettingsController::class, 'testEmail'])->name('email.test');
+            Route::get('/export-db', [SettingsController::class, 'exportDatabase'])->name('export-db');
+            Route::post('/api-tokens', [SettingsController::class, 'generateApiToken'])->name('api-tokens.generate');
+            Route::delete('/api-tokens/{tokenId}', [SettingsController::class, 'revokeApiToken'])->name('api-tokens.revoke');
+            Route::get('/scheduled-tasks', [SettingsController::class, 'scheduledTasks'])->name('scheduled-tasks');
+            Route::post('/scheduled-tasks', [SettingsController::class, 'updateScheduledTasks'])->name('scheduled-tasks.update');
+            Route::post('/backups/run-now', [SettingsController::class, 'runBackupNow'])->name('backups.run-now');
+            Route::post('/backups/upload', [SettingsController::class, 'uploadBackup'])->name('backups.upload');
+            Route::get('/backups/{filename}', [SettingsController::class, 'downloadBackup'])->name('backups.download')->where('filename', '.+');
+            Route::delete('/backups/{filename}', [SettingsController::class, 'deleteBackup'])->name('backups.delete')->where('filename', '.+');
+            Route::get('/backups/google-drive/list', [SettingsController::class, 'listGoogleDriveBackups'])->name('backups.google-list');
+            Route::post('/backups/restore', [SettingsController::class, 'restore'])->name('backups.restore');
+            Route::get('/google-drive/connect', [GoogleDriveController::class, 'redirect'])->name('google-drive.connect');
+            Route::delete('/google-drive/disconnect', [GoogleDriveController::class, 'disconnect'])->name('google-drive.disconnect');
+            Route::get('/google-drive-tutorial', function () {
+                return view('settings.google-drive-tutorial');
+            })->name('google-drive-tutorial');
         });
 
         // Reports
@@ -150,5 +184,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::resource('webhooks', WebhookController::class);
         Route::post('/webhooks/{webhook}/test', [WebhookController::class, 'test'])->name('webhooks.test');
         Route::post('/webhooks/{webhook}/toggle-status', [WebhookController::class, 'toggleStatus'])->name('webhooks.toggle-status');
+
+        // Google Drive OAuth callback (fixed URL that Google redirects to)
+        Route::get('/settings/google-drive/callback', [GoogleDriveController::class, 'callback'])->name('google-drive.callback');
     });
 });

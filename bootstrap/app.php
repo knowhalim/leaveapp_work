@@ -18,8 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
-            'role' => \App\Http\Middleware\RoleMiddleware::class,
-            'active' => \App\Http\Middleware\EnsureUserIsActive::class,
+            'role'     => \App\Http\Middleware\RoleMiddleware::class,
+            'active'   => \App\Http\Middleware\EnsureUserIsActive::class,
+            'api.auth' => \App\Http\Middleware\ApiAuthMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

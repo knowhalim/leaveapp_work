@@ -1,6 +1,5 @@
 import { Head, useForm } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Calendar } from 'lucide-react';
 
 export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }) {
     const { data, setData, post, processing, errors } = useForm({
@@ -20,6 +19,50 @@ export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }
 
     const selectedLeaveType = leaveTypes.find(t => t.id === parseInt(data.leave_type_id));
     const selectedBalance = leaveBalances.find(b => b.leave_type_id === parseInt(data.leave_type_id));
+
+    const today = new Date().toISOString().split('T')[0];
+    const minStartDate = selectedLeaveType?.max_backdate_days
+        ? new Date(Date.now() - selectedLeaveType.max_backdate_days * 86400000).toISOString().split('T')[0]
+        : today;
+
+    const isSingleDay = data.start_date && data.end_date && data.start_date === data.end_date;
+
+    // When switching between single/multi day, reset halves to sensible defaults
+    const handleStartDateChange = (val) => {
+        setData(d => ({
+            ...d,
+            start_date: val,
+            start_half: 'full',
+            end_half: 'full',
+        }));
+    };
+
+    const handleEndDateChange = (val) => {
+        setData(d => ({
+            ...d,
+            end_date: val,
+            start_half: 'full',
+            end_half: 'full',
+        }));
+    };
+
+    // Single day: one picker with Full / AM / PM
+    // value maps to: full → 'full', AM → 'first_half', PM → 'second_half'
+    const singleDayValue = () => {
+        if (data.start_half === 'first_half') return 'AM';
+        if (data.start_half === 'second_half') return 'PM';
+        return 'full';
+    };
+
+    const handleSingleDayChange = (val) => {
+        if (val === 'full') {
+            setData(d => ({ ...d, start_half: 'full', end_half: 'full' }));
+        } else if (val === 'AM') {
+            setData(d => ({ ...d, start_half: 'first_half', end_half: 'first_half' }));
+        } else {
+            setData(d => ({ ...d, start_half: 'second_half', end_half: 'second_half' }));
+        }
+    };
 
     return (
         <AuthenticatedLayout title="Apply for Leave">
@@ -64,8 +107,8 @@ export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }
                                 <input
                                     type="date"
                                     value={data.start_date}
-                                    onChange={(e) => setData('start_date', e.target.value)}
-                                    min={new Date().toISOString().split('T')[0]}
+                                    onChange={(e) => handleStartDateChange(e.target.value)}
+                                    min={minStartDate}
                                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 />
                                 {errors.start_date && (
@@ -79,8 +122,8 @@ export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }
                                 <input
                                     type="date"
                                     value={data.end_date}
-                                    onChange={(e) => setData('end_date', e.target.value)}
-                                    min={data.start_date || new Date().toISOString().split('T')[0]}
+                                    onChange={(e) => handleEndDateChange(e.target.value)}
+                                    min={data.start_date || minStartDate}
                                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 />
                                 {errors.end_date && (
@@ -89,38 +132,55 @@ export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }
                             </div>
                         </div>
 
-                        {/* Half Day Options */}
-                        {selectedLeaveType?.allows_half_day && (
-                            <div className="grid grid-cols-2 gap-4">
+                        {/* Half Day Options — only shown once dates are selected */}
+                        {selectedLeaveType?.allows_half_day && data.start_date && data.end_date && (
+                            isSingleDay ? (
+                                /* Single day: one simple picker */
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">
-                                        Start Day
+                                        Duration
                                     </label>
                                     <select
-                                        value={data.start_half}
-                                        onChange={(e) => setData('start_half', e.target.value)}
+                                        value={singleDayValue()}
+                                        onChange={(e) => handleSingleDayChange(e.target.value)}
                                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                     >
                                         <option value="full">Full Day</option>
-                                        <option value="first_half">First Half</option>
-                                        <option value="second_half">Second Half</option>
+                                        <option value="AM">Half Day — Morning (AM)</option>
+                                        <option value="PM">Half Day — Afternoon (PM)</option>
                                     </select>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">
-                                        End Day
-                                    </label>
-                                    <select
-                                        value={data.end_half}
-                                        onChange={(e) => setData('end_half', e.target.value)}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                    >
-                                        <option value="full">Full Day</option>
-                                        <option value="first_half">First Half</option>
-                                        <option value="second_half">Second Half</option>
-                                    </select>
+                            ) : (
+                                /* Multi-day: start can be PM, end can be AM */
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            First Day
+                                        </label>
+                                        <select
+                                            value={data.start_half === 'second_half' ? 'second_half' : 'full'}
+                                            onChange={(e) => setData('start_half', e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        >
+                                            <option value="full">Full Day</option>
+                                            <option value="second_half">Half Day — Afternoon (PM)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">
+                                            Last Day
+                                        </label>
+                                        <select
+                                            value={data.end_half === 'first_half' ? 'first_half' : 'full'}
+                                            onChange={(e) => setData('end_half', e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        >
+                                            <option value="full">Full Day</option>
+                                            <option value="first_half">Half Day — Morning (AM)</option>
+                                        </select>
+                                    </div>
                                 </div>
-                            </div>
+                            )
                         )}
 
                         {/* Reason */}

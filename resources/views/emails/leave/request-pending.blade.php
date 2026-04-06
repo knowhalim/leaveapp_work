@@ -43,13 +43,13 @@
             @endif
         </table>
 
-        <p>Please log in to the HR Leave System to review and approve or reject this request.</p>
+        <p>Please log in to {{ \App\Models\SystemSetting::getCompanyName() }} to review and approve or reject this request.</p>
 
         <div style="text-align: center; margin: 30px 0;">
             <a href="{{ url('/leaves/' . $leaveRequest->id) }}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Review Request</a>
         </div>
 
-        <p style="color: #6b7280; font-size: 14px;">This is an automated message from the HR Leave System.</p>
+        <p style="color: #6b7280; font-size: 14px;">This is an automated message from {{ \App\Models\SystemSetting::getCompanyName() }}.</p>
     </div>
 </body>
 </html>

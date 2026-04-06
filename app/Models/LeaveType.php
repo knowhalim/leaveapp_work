@@ -19,6 +19,7 @@ class LeaveType extends Model
         'is_paid',
         'requires_attachment',
         'allows_half_day',
+        'max_backdate_days',
         'is_active',
         'settings',
     ];
