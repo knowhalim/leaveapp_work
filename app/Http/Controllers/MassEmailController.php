@@ -16,10 +16,18 @@ class MassEmailController extends Controller
 {
     public function index()
     {
+        $positions = Employee::whereNotNull('position')
+            ->where('position', '!=', '')
+            ->select('position')
+            ->distinct()
+            ->orderBy('position')
+            ->pluck('position');
+
         return Inertia::render('Admin/MassEmail', [
             'departments' => Department::active()->get(),
             'employeeTypes' => EmployeeType::active()->get(),
             'roles' => ['employee', 'manager', 'admin', 'super_admin'],
+            'positions' => $positions,
         ]);
     }
 
@@ -27,10 +35,11 @@ class MassEmailController extends Controller
     {
         try {
             $validated = $request->validate([
-                'recipient_type' => ['required', 'string', 'in:all,department,employee_type,role'],
+                'recipient_type' => ['required', 'string', 'in:all,department,employee_type,role,position'],
                 'department_id' => ['nullable', 'exists:departments,id'],
                 'employee_type_id' => ['nullable', 'exists:employee_types,id'],
                 'role' => ['nullable', 'string', 'in:employee,manager,admin,super_admin'],
+                'position' => ['nullable', 'string', 'max:255'],
             ]);
 
             $recipients = $this->getRecipients($validated);
@@ -67,10 +76,11 @@ class MassEmailController extends Controller
             $validated = $request->validate([
                 'subject' => ['required', 'string', 'max:255'],
                 'message' => ['required', 'string', 'max:10000'],
-                'recipient_type' => ['required', 'string', 'in:all,department,employee_type,role'],
+                'recipient_type' => ['required', 'string', 'in:all,department,employee_type,role,position'],
                 'department_id' => ['nullable', 'exists:departments,id'],
                 'employee_type_id' => ['nullable', 'exists:employee_types,id'],
                 'role' => ['nullable', 'string', 'in:employee,manager,admin,super_admin'],
+                'position' => ['nullable', 'string', 'max:255'],
             ]);
 
             // Check if email is enabled
@@ -113,6 +123,7 @@ class MassEmailController extends Controller
             ActivityLog::log('mass_email.sent', null, [
                 'subject' => $validated['subject'],
                 'recipient_type' => $validated['recipient_type'],
+                'position' => $validated['position'] ?? null,
                 'total_recipients' => $recipients->count(),
                 'sent_count' => $sentCount,
                 'failed_count' => $failedCount,
@@ -169,6 +180,14 @@ class MassEmailController extends Controller
             case 'role':
                 if (!empty($filters['role'])) {
                     $query->where('role', $filters['role']);
+                }
+                break;
+
+            case 'position':
+                if (!empty($filters['position'])) {
+                    $query->whereHas('employee', function ($q) use ($filters) {
+                        $q->where('position', $filters['position']);
+                    });
                 }
                 break;
 

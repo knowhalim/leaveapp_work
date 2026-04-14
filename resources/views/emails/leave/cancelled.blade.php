@@ -10,9 +10,13 @@
     </div>
 
     <div style="background-color: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-        <p>Dear Manager,</p>
+        <p>Dear {{ $recipientName }},</p>
 
-        <p>A leave request has been cancelled by the employee.</p>
+        @if($isEmployee)
+            <p>Your leave request has been cancelled.</p>
+        @else
+            <p>A leave request has been cancelled by the employee.</p>
+        @endif
 
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
             <tr>

@@ -17,11 +17,6 @@
 #   chmod +x deploy-localv2.sh
 #   ./deploy-localv2.sh
 #
-# For Azure VM with key auth:
-#   VPS IP:       20.188.123.16
-#   SSH user:     aisg
-#   SSH key path: ~/.ssh/aisg-azure.key
-#
 # Requirements:
 #   - SSH access to the VPS (sudo-capable user)
 #   - rsync installed locally (pre-installed on macOS)

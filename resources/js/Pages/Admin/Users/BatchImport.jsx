@@ -7,15 +7,31 @@ import { toast } from 'sonner';
 const MAX_FILE_SIZE_MB = 2;
 const ALLOWED_EXTENSIONS = ['.csv'];
 
-export default function BatchImport({ availableSupervisors = [], departments = [], employeeTypes = [] }) {
+export default function BatchImport({ availableSupervisors = [], departments = [], employeeTypes = [], leaveTypes = [] }) {
     const { auth, flash } = usePage().props;
     const isAdmin = auth.user.role === 'super_admin' || auth.user.role === 'admin';
 
     const { data, setData, post, processing, errors, reset } = useForm({
         csv_file: null,
-        supervisor_id: '',
+        supervisors: [],
         send_welcome_emails: true,
     });
+
+    const addSupervisor = (supervisorId) => {
+        const sup = availableSupervisors.find((s) => s.id === parseInt(supervisorId));
+        if (!sup || data.supervisors.some((s) => s.id === sup.id)) return;
+        setData('supervisors', [...data.supervisors, { ...sup, is_primary: data.supervisors.length === 0 }]);
+    };
+
+    const removeSupervisor = (supervisorId) => {
+        const updated = data.supervisors.filter((s) => s.id !== supervisorId);
+        if (updated.length > 0 && !updated.some((s) => s.is_primary)) updated[0].is_primary = true;
+        setData('supervisors', updated);
+    };
+
+    const setPrimarySupervisor = (supervisorId) => {
+        setData('supervisors', data.supervisors.map((s) => ({ ...s, is_primary: s.id === supervisorId })));
+    };
 
     const [fileError, setFileError] = useState('');
 
@@ -53,7 +69,7 @@ export default function BatchImport({ availableSupervisors = [], departments = [
         post('/users/batch-import', {
             forceFormData: true,
             onSuccess: () => {
-                reset('csv_file');
+                reset('csv_file', 'supervisors');
                 const fileInput = document.getElementById('csv_file');
                 if (fileInput) fileInput.value = '';
             },
@@ -88,8 +104,7 @@ export default function BatchImport({ availableSupervisors = [], departments = [
                         Import multiple employees at once by uploading a CSV file.
                     </p>
                     <a
-                        href="/sample-import-users.csv"
-                        download
+                        href="/users/batch-import/sample-csv"
                         className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
                     >
                         <Download className="h-4 w-4" />
@@ -185,6 +200,16 @@ export default function BatchImport({ availableSupervisors = [], departments = [
                                 </ul>
                             </div>
                         </div>
+
+                        {leaveTypes.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
+                                You can also include{' '}
+                                <a href="#leave-balance-ref" className="text-indigo-600 hover:underline font-medium">
+                                    leave balance columns
+                                </a>
+                                {' '}(optional) to set custom entitled days per employee.
+                            </div>
+                        )}
                         {departments.length > 0 && (
                             <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
                                 <strong>Available departments:</strong> {departments.join(', ')}
@@ -228,24 +253,64 @@ export default function BatchImport({ availableSupervisors = [], departments = [
 
                             {/* Supervisor selection (admin/super_admin only) */}
                             {isAdmin ? (
-                                <div>
-                                    <label htmlFor="supervisor_id" className="block text-sm font-medium text-gray-700">
-                                        Leave Approver (Supervisor) <span className="text-red-500">*</span>
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-medium text-gray-700">
+                                        Leave Approver(s) / Supervisor(s) <span className="text-red-500">*</span>
                                     </label>
-                                    <select
-                                        id="supervisor_id"
-                                        value={data.supervisor_id}
-                                        onChange={(e) => setData('supervisor_id', e.target.value)}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                    >
-                                        <option value="">Select a supervisor...</option>
-                                        {availableSupervisors.map((sup) => (
-                                            <option key={sup.id} value={sup.id}>
-                                                {sup.name} — {sup.role.replace('_', ' ')} {sup.department ? `(${sup.department})` : ''}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {errors.supervisor_id && <p className="mt-1 text-sm text-red-600">{errors.supervisor_id}</p>}
+
+                                    {/* Add supervisor dropdown */}
+                                    {availableSupervisors.filter(s => !data.supervisors.some(ds => ds.id === s.id)).length > 0 && (
+                                        <select
+                                            onChange={(e) => { addSupervisor(e.target.value); e.target.value = ''; }}
+                                            defaultValue=""
+                                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        >
+                                            <option value="" disabled>Select a supervisor to add...</option>
+                                            {availableSupervisors
+                                                .filter(s => !data.supervisors.some(ds => ds.id === s.id))
+                                                .map((sup) => (
+                                                    <option key={sup.id} value={sup.id}>
+                                                        {sup.name} — {sup.role.replace('_', ' ')} {sup.department ? `(${sup.department})` : ''}
+                                                    </option>
+                                                ))}
+                                        </select>
+                                    )}
+
+                                    {/* Selected supervisors list */}
+                                    {data.supervisors.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {data.supervisors.map((sup) => (
+                                                <div key={sup.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-medium text-gray-900">{sup.name}</span>
+                                                            {sup.is_primary && (
+                                                                <span className="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800">Primary</span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-gray-500">
+                                                            {sup.role.replace('_', ' ')} {sup.department ? `· ${sup.department}` : ''}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        {!sup.is_primary && (
+                                                            <button type="button" onClick={() => setPrimarySupervisor(sup.id)}
+                                                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+                                                                Set Primary
+                                                            </button>
+                                                        )}
+                                                        <button type="button" onClick={() => removeSupervisor(sup.id)}
+                                                            className="text-xs text-red-600 hover:text-red-800 font-medium">
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-gray-500">No supervisors selected. At least one is required.</p>
+                                    )}
+                                    {errors.supervisors && <p className="mt-1 text-sm text-red-600">{errors.supervisors}</p>}
                                 </div>
                             ) : (
                                 <div className="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 flex items-center gap-2">
@@ -281,7 +346,7 @@ export default function BatchImport({ availableSupervisors = [], departments = [
                             </a>
                             <button
                                 type="submit"
-                                disabled={processing || !data.csv_file || !!fileError}
+                                disabled={processing || !data.csv_file || !!fileError || (isAdmin && data.supervisors.length === 0)}
                                 className="inline-flex items-center gap-2 px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
                             >
                                 <Upload className="h-4 w-4" />
@@ -290,6 +355,43 @@ export default function BatchImport({ availableSupervisors = [], departments = [
                         </div>
                     </div>
                 </form>
+
+                {/* Leave balance column reference */}
+                {leaveTypes.length > 0 && (
+                    <div id="leave-balance-ref" className="bg-white shadow rounded-lg scroll-mt-6">
+                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-base font-medium text-gray-900">Leave Balance Column Reference</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">Use these codes as column headers in your CSV to set custom entitled days. Leave blank to use the default.</p>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-gray-200">
+                                            <th className="text-left py-2 pr-6 font-medium text-gray-700 w-28">Column (Code)</th>
+                                            <th className="text-left py-2 pr-6 font-medium text-gray-700">Leave Type</th>
+                                            <th className="text-left py-2 font-medium text-gray-700">Default Days</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {leaveTypes.map(lt => (
+                                            <tr key={lt.code} className="hover:bg-gray-50">
+                                                <td className="py-2 pr-6">
+                                                    <code className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs font-mono">{lt.code}</code>
+                                                </td>
+                                                <td className="py-2 pr-6 text-gray-600">{lt.name}</td>
+                                                <td className="py-2 text-gray-500">{lt.default_days}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="mt-4 text-xs text-gray-400">Values must be numeric. Blank or omitted = use the leave type default. Non-numeric values are ignored.</p>
+                        </div>
+                    </div>
+                )}
             </div>
         </AuthenticatedLayout>
     );

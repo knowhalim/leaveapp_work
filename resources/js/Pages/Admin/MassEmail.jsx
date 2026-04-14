@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Mail, Send, Users, AlertCircle, CheckCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-export default function MassEmail({ departments, employeeTypes, roles }) {
+export default function MassEmail({ departments, employeeTypes, roles, positions }) {
     const [preview, setPreview] = useState(null);
     const [loading, setLoading] = useState(false);
     const [sendStatus, setSendStatus] = useState(null);
@@ -16,6 +16,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
         department_id: '',
         employee_type_id: '',
         role: '',
+        position: '',
     });
 
     const fetchPreview = async () => {
@@ -26,6 +27,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                 department_id: data.department_id || null,
                 employee_type_id: data.employee_type_id || null,
                 role: data.role || null,
+                position: data.position || null,
             });
             setPreview(response.data);
         } catch (error) {
@@ -40,7 +42,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
             fetchPreview();
         }, 300);
         return () => clearTimeout(timer);
-    }, [data.recipient_type, data.department_id, data.employee_type_id, data.role]);
+    }, [data.recipient_type, data.department_id, data.employee_type_id, data.role, data.position]);
 
     const handleSend = async (e) => {
         e.preventDefault();
@@ -73,6 +75,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                 department_id: data.department_id || null,
                 employee_type_id: data.employee_type_id || null,
                 role: data.role || null,
+                position: data.position || null,
             });
 
             setSendStatus({ type: 'success', message: response.data.message || 'Emails sent successfully!' });
@@ -84,6 +87,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                 department_id: '',
                 employee_type_id: '',
                 role: '',
+                position: '',
             });
         } catch (error) {
             const message = error.response?.data?.message || error.message || 'Failed to send emails';
@@ -105,6 +109,8 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                 return type ? `Employee Type: ${type.name}` : 'Select an employee type';
             case 'role':
                 return data.role ? `Role: ${data.role.replace('_', ' ')}` : 'Select a role';
+            case 'position':
+                return data.position ? `Position: ${data.position}` : 'Select a position';
             default:
                 return 'Select recipients';
         }
@@ -137,10 +143,10 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Recipients
                                 </label>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
                                     <button
                                         type="button"
-                                        onClick={() => setData({ ...data, recipient_type: 'all', department_id: '', employee_type_id: '', role: '' })}
+                                        onClick={() => setData({ ...data, recipient_type: 'all', department_id: '', employee_type_id: '', role: '', position: '' })}
                                         className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                                             data.recipient_type === 'all'
                                                 ? 'bg-indigo-600 text-white'
@@ -151,7 +157,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setData({ ...data, recipient_type: 'department', employee_type_id: '', role: '' })}
+                                        onClick={() => setData({ ...data, recipient_type: 'department', employee_type_id: '', role: '', position: '' })}
                                         className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                                             data.recipient_type === 'department'
                                                 ? 'bg-indigo-600 text-white'
@@ -162,7 +168,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setData({ ...data, recipient_type: 'employee_type', department_id: '', role: '' })}
+                                        onClick={() => setData({ ...data, recipient_type: 'employee_type', department_id: '', role: '', position: '' })}
                                         className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                                             data.recipient_type === 'employee_type'
                                                 ? 'bg-indigo-600 text-white'
@@ -173,7 +179,7 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                                     </button>
                                     <button
                                         type="button"
-                                        onClick={() => setData({ ...data, recipient_type: 'role', department_id: '', employee_type_id: '' })}
+                                        onClick={() => setData({ ...data, recipient_type: 'role', department_id: '', employee_type_id: '', position: '' })}
                                         className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                                             data.recipient_type === 'role'
                                                 ? 'bg-indigo-600 text-white'
@@ -181,6 +187,17 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                                         }`}
                                     >
                                         By Role
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setData({ ...data, recipient_type: 'position', department_id: '', employee_type_id: '', role: '' })}
+                                        className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                                            data.recipient_type === 'position'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        By Position
                                     </button>
                                 </div>
 
@@ -224,6 +241,21 @@ export default function MassEmail({ departments, employeeTypes, roles }) {
                                         {roles.map((role) => (
                                             <option key={role} value={role}>
                                                 {role.replace('_', ' ')}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+
+                                {data.recipient_type === 'position' && (
+                                    <select
+                                        value={data.position}
+                                        onChange={(e) => setData('position', e.target.value)}
+                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    >
+                                        <option value="">Select Position</option>
+                                        {(positions || []).map((pos) => (
+                                            <option key={pos} value={pos}>
+                                                {pos}
                                             </option>
                                         ))}
                                     </select>

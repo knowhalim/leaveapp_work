@@ -90,11 +90,16 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::middleware('role:super_admin,admin,manager')->group(function () {
         Route::get('/users/batch-import', [UserController::class, 'batchImport'])->name('users.batch-import');
         Route::post('/users/batch-import', [UserController::class, 'processBatchImport'])->name('users.batch-import.process');
+        Route::get('/users/batch-import/sample-csv', [UserController::class, 'sampleCsv'])->name('users.batch-import.sample-csv');
     });
 
     // Admin routes
     Route::middleware('role:super_admin,admin')->group(function () {
         // User management
+        Route::post('/users/bulk-supervisors', [UserController::class, 'bulkAssignSupervisors'])->name('users.bulk-supervisors');
+        Route::post('/users/bulk-update-position', [UserController::class, 'bulkUpdatePosition'])->name('users.bulk-update-position');
+        Route::post('/users/bulk-delete-request', [UserController::class, 'bulkDeleteRequest'])->name('users.bulk-delete-request');
+        Route::get('/users/bulk-delete/confirm/{token}', [UserController::class, 'bulkDeleteConfirm'])->name('users.bulk-delete-confirm');
         Route::resource('users', UserController::class);
         Route::post('/users/{user}/toggle-status', [UserController::class, 'toggleStatus'])->name('users.toggle-status');
 

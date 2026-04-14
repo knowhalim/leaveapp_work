@@ -23,10 +23,6 @@
 #   chmod +x update-localv2.sh
 #   ./update-localv2.sh
 #
-# For Azure VM with key auth:
-#   VPS IP:       20.188.123.16
-#   SSH user:     aisg
-#   SSH key path: ~/.ssh/aisg-azure.key
 #####################################################################
 
 set -e
@@ -93,6 +89,7 @@ rsync -azh --progress \
     --exclude='.env.backup' \
     --exclude='.env.production' \
     --exclude='database/database.sqlite' \
+    --exclude='bootstrap/cache' \
     --exclude='public/build' \
     --exclude='public/hot' \
     --exclude='public/storage' \

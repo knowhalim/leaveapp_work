@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\Department;
 use App\Models\Employee;
+use App\Models\EmployeeLeaveBalance;
 use App\Models\EmployeeType;
+use App\Models\LeaveType;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\EmailService;
 use App\Services\LeaveBalanceService;
@@ -40,9 +43,9 @@ class UserController extends Controller
 
     public function index(Request $request)
     {
-        $query = User::with('employee.department', 'employee.employeeType');
+        $query = User::with('employee.department', 'employee.employeeType', 'employee.supervisors');
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -50,19 +53,35 @@ class UserController extends Controller
             });
         }
 
-        if ($request->has('role') && $request->role !== 'all') {
+        if ($request->filled('role') && $request->role !== 'all') {
             $query->where('role', $request->role);
         }
 
-        if ($request->has('status')) {
+        if ($request->filled('status') && $request->status !== 'all') {
             $query->where('is_active', $request->status === 'active');
+        }
+
+        if ($request->filled('position')) {
+            $position = $request->position;
+            $query->whereHas('employee', function ($q) use ($position) {
+                $q->where('position', 'like', "%{$position}%");
+            });
         }
 
         $users = $query->latest()->paginate(15)->withQueryString();
 
+        $positions = Employee::whereNotNull('position')
+            ->where('position', '!=', '')
+            ->select('position')
+            ->distinct()
+            ->orderBy('position')
+            ->pluck('position');
+
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
-            'filters' => $request->only(['search', 'role', 'status']),
+            'filters' => $request->only(['search', 'role', 'status', 'position']),
+            'availableSupervisors' => $this->getEligibleSupervisors(),
+            'positions' => $positions,
         ]);
     }
 
@@ -349,12 +368,130 @@ class UserController extends Controller
             ->with('success', 'User deleted successfully.');
     }
 
+    public function bulkUpdatePosition(Request $request)
+    {
+        $request->validate([
+            'user_ids' => ['required', 'array', 'min:1'],
+            'user_ids.*' => ['required', 'exists:users,id'],
+            'position' => ['required', 'string', 'max:255'],
+        ]);
+
+        $authUser = auth()->user();
+        $userIds = $request->user_ids;
+        $position = $request->position;
+
+        Employee::whereIn('user_id', $userIds)->update(['position' => $position]);
+
+        ActivityLog::log('user.bulk_position_updated', $authUser, [
+            'user_ids' => $userIds,
+            'position' => $position,
+        ]);
+
+        return back()->with('success', count($userIds) . ' user(s) position updated to "' . $position . '".');
+    }
+
+    public function bulkDeleteRequest(Request $request, EmailService $emailService)
+    {
+        $request->validate([
+            'user_ids' => ['required', 'array', 'min:1'],
+            'user_ids.*' => ['required', 'exists:users,id'],
+        ]);
+
+        $authUser = auth()->user();
+        $userIds = $request->user_ids;
+
+        // Prevent deleting self
+        if (in_array($authUser->id, $userIds)) {
+            return back()->with('error', 'You cannot delete your own account.');
+        }
+
+        // Admin cannot delete super_admins or other admins
+        if ($authUser->role === 'admin') {
+            $forbidden = User::whereIn('id', $userIds)
+                ->where(function ($q) use ($authUser) {
+                    $q->where('role', 'super_admin')
+                        ->orWhere(function ($q2) use ($authUser) {
+                            $q2->where('role', 'admin')->where('id', '!=', $authUser->id);
+                        });
+                })->count();
+            if ($forbidden > 0) {
+                return back()->with('error', 'You do not have permission to delete some of the selected users.');
+            }
+        }
+
+        // Store pending deletion in cache with 30 min TTL
+        $token = \Illuminate\Support\Str::random(64);
+        $users = User::whereIn('id', $userIds)->get(['id', 'name', 'email']);
+
+        \Illuminate\Support\Facades\Cache::put("bulk_delete_{$token}", [
+            'user_ids' => $userIds,
+            'requested_by' => $authUser->id,
+        ], now()->addMinutes(30));
+
+        // Send confirmation email to requesting admin
+        $emailService->sendBulkDeleteConfirmationEmail($authUser, $users, $token);
+
+        return back()->with('success', 'A confirmation email has been sent to ' . $authUser->email . '. Click the link in the email to confirm deletion. The link expires in 30 minutes.');
+    }
+
+    public function bulkDeleteConfirm(string $token)
+    {
+        $data = \Illuminate\Support\Facades\Cache::get("bulk_delete_{$token}");
+
+        if (!$data) {
+            return redirect()->route('users.index')->with('error', 'This deletion link has expired or is invalid.');
+        }
+
+        $authUser = auth()->user();
+        if ($authUser->id !== $data['requested_by']) {
+            return redirect()->route('users.index')->with('error', 'You are not authorised to confirm this deletion.');
+        }
+
+        $userIds = $data['user_ids'];
+        $users = User::whereIn('id', $userIds)->get();
+        $count = $users->count();
+
+        foreach ($users as $user) {
+            ActivityLog::log('user.deleted', $user, [
+                'deleted_by' => $authUser->id,
+                'user_email' => $user->email,
+                'bulk' => true,
+            ]);
+            $user->delete();
+        }
+
+        \Illuminate\Support\Facades\Cache::forget("bulk_delete_{$token}");
+
+        return redirect()->route('users.index')->with('success', "{$count} user(s) deleted successfully.");
+    }
+
     public function batchImport()
     {
         return Inertia::render('Admin/Users/BatchImport', [
             'availableSupervisors' => $this->getEligibleSupervisors(),
             'departments' => Department::active()->pluck('name')->toArray(),
             'employeeTypes' => EmployeeType::active()->pluck('name')->toArray(),
+            'leaveTypes' => LeaveType::active()->orderBy('code')->get(['code', 'name', 'default_days']),
+        ]);
+    }
+
+    public function sampleCsv()
+    {
+        $leaveTypes = LeaveType::active()->orderBy('code')->get(['code', 'name', 'default_days']);
+
+        $headers = ['name', 'email', 'employee_number', 'nric', 'department', 'employee_type', 'position', 'hire_date', 'phone'];
+        $sampleRow = ['John Doe', 'john@example.com', 'EMP001', 'S1234567A', 'Engineering', 'Full-Time', 'Software Engineer', '2024-01-15', '+65 9123 4567'];
+
+        foreach ($leaveTypes as $lt) {
+            $headers[] = $lt->code;
+            $sampleRow[] = ''; // empty = use leave type default
+        }
+
+        $csv = implode(',', $headers) . "\n" . implode(',', $sampleRow) . "\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="sample-import-users.csv"',
         ]);
     }
 
@@ -369,7 +506,9 @@ class UserController extends Controller
         ];
 
         if ($isAdmin) {
-            $rules['supervisor_id'] = ['required', 'exists:employees,id'];
+            $rules['supervisors']            = ['required', 'array', 'min:1'];
+            $rules['supervisors.*.id']       = ['required', 'exists:employees,id'];
+            $rules['supervisors.*.is_primary'] = ['boolean'];
         }
 
         $request->validate($rules);
@@ -407,15 +546,20 @@ class UserController extends Controller
             ->mapWithKeys(fn ($id, $name) => [strtolower($name) => $id])
             ->toArray();
 
-        // Determine supervisor
+        // Leave types keyed by lowercase code for CSV column matching
+        $leaveTypeMap = LeaveType::active()->get()->keyBy(fn ($lt) => strtolower($lt->code));
+        $financialYear = SystemSetting::getFinancialYear();
+
+        // Determine supervisors
         if ($isAdmin) {
-            $supervisorId = (int) $request->input('supervisor_id');
+            $supervisorsList = $request->input('supervisors', []);
         } else {
-            $supervisorId = $user->employee?->id;
-            if (!$supervisorId) {
+            $selfId = $user->employee?->id;
+            if (!$selfId) {
                 fclose($handle);
                 return back()->with('error', 'Your account does not have an employee profile to act as supervisor.');
             }
+            $supervisorsList = [['id' => $selfId, 'is_primary' => true]];
         }
 
         $rawSendEmails = $request->input('send_welcome_emails', 'true');
@@ -498,7 +642,7 @@ class UserController extends Controller
             $plainPassword = Str::random(10);
 
             try {
-                $newUser = DB::transaction(function () use ($data, $plainPassword, $departmentId, $employeeTypeId, $supervisorId, $balanceService, $nric) {
+                $newUser = DB::transaction(function () use ($data, $plainPassword, $departmentId, $employeeTypeId, $supervisorsList, $balanceService, $nric, $leaveTypeMap, $financialYear) {
                     $newUser = User::create([
                         'name' => $data['name'],
                         'email' => $data['email'],
@@ -518,10 +662,27 @@ class UserController extends Controller
                         'phone' => !empty($data['phone']) ? $data['phone'] : null,
                     ]);
 
-                    // Assign supervisor as primary
-                    $employee->supervisors()->attach($supervisorId, ['is_primary' => true]);
+                    // Assign supervisors
+                    $syncData = [];
+                    foreach ($supervisorsList as $sup) {
+                        $syncData[(int) $sup['id']] = ['is_primary' => (bool) ($sup['is_primary'] ?? false)];
+                    }
+                    $employee->supervisors()->sync($syncData);
 
+                    // Initialize balances with defaults first
                     $balanceService->initializeBalancesForEmployee($employee);
+
+                    // Override entitled_days for any leave codes present in the CSV row
+                    foreach ($leaveTypeMap as $code => $leaveType) {
+                        $csvValue = $data[$code] ?? '';
+                        if ($csvValue !== '' && is_numeric($csvValue) && (float) $csvValue >= 0) {
+                            EmployeeLeaveBalance::where([
+                                'employee_id' => $employee->id,
+                                'leave_type_id' => $leaveType->id,
+                                'financial_year' => $financialYear,
+                            ])->update(['entitled_days' => (float) $csvValue]);
+                        }
+                    }
 
                     ActivityLog::log('user.created', $newUser, [
                         'created_by' => auth()->id(),
@@ -562,6 +723,53 @@ class UserController extends Controller
             ->with('import_success_count', $successCount)
             ->with('import_errors', $errors)
             ->with('success', $successCount > 0 ? "{$successCount} user(s) imported successfully." : null);
+    }
+
+    public function bulkAssignSupervisors(Request $request)
+    {
+        $validated = $request->validate([
+            'user_ids'         => ['required', 'array', 'min:1'],
+            'user_ids.*'       => ['required', 'exists:users,id'],
+            'supervisor_ids'   => ['nullable', 'array'],
+            'supervisor_ids.*' => ['exists:employees,id'],
+        ]);
+
+        if (auth()->user()->role === 'admin') {
+            $hasSuperAdmin = User::whereIn('id', $validated['user_ids'])
+                ->where('role', 'super_admin')
+                ->exists();
+            if ($hasSuperAdmin) {
+                return back()->with('error', 'Admins cannot modify super admin accounts.');
+            }
+        }
+
+        $supervisorIds = $validated['supervisor_ids'] ?? [];
+        $employees = Employee::with('supervisors')->whereIn('user_id', $validated['user_ids'])->get();
+
+        DB::transaction(function () use ($supervisorIds, $employees) {
+            foreach ($employees as $employee) {
+                // Build sync data, preserving is_primary for existing supervisors
+                $existing = $employee->supervisors->keyBy('id');
+                $syncData = [];
+                foreach ($supervisorIds as $supId) {
+                    $syncData[$supId] = [
+                        'is_primary' => $existing->has($supId)
+                            ? (bool) $existing[$supId]->pivot->is_primary
+                            : false,
+                    ];
+                }
+                $employee->supervisors()->sync($syncData);
+            }
+        });
+
+        $count = $employees->count();
+
+        ActivityLog::log('user.bulk_supervisor_update', auth()->user(), [
+            'user_count' => $count,
+            'updated_by' => auth()->id(),
+        ]);
+
+        return back()->with('success', "Supervisors updated for {$count} user(s).");
     }
 
     public function toggleStatus(User $user)

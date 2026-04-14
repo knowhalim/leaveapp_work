@@ -20,10 +20,6 @@
 #   - DNS A record already pointing to the VPS IP
 #   - deploy-localv2.sh already run
 #
-# For Azure VM with key auth:
-#   VPS IP:       20.188.123.16
-#   SSH user:     aisg
-#   SSH key path: ~/.ssh/aisg-azure.key
 #####################################################################
 
 set -e

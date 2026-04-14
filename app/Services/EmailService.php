@@ -131,16 +131,52 @@ class EmailService
 
     public function sendLeaveCancelledNotification(LeaveRequest $leaveRequest): void
     {
-        $leaveRequest->load(['employee.user', 'leaveType']);
+        $leaveRequest->load(['employee.user', 'employee.department', 'employee.supervisors.user', 'leaveType']);
 
+        $employeeUser = $leaveRequest->employee->user;
+
+        // Notify the employee who applied
+        $this->sendEmail(
+            $employeeUser->email,
+            'Your Leave Request Has Been Cancelled',
+            'emails.leave.cancelled',
+            [
+                'leaveRequest' => $leaveRequest,
+                'recipientName' => $employeeUser->name,
+                'isEmployee' => true,
+            ]
+        );
+
+        // Notify all assigned supervisors
+        $notifiedUserIds = [$employeeUser->id];
+        foreach ($leaveRequest->employee->supervisors as $supervisor) {
+            if (!$supervisor->user || in_array($supervisor->user->id, $notifiedUserIds)) {
+                continue;
+            }
+            $this->sendEmail(
+                $supervisor->user->email,
+                'Leave Request Cancelled',
+                'emails.leave.cancelled',
+                [
+                    'leaveRequest' => $leaveRequest,
+                    'recipientName' => $supervisor->user->name,
+                    'isEmployee' => false,
+                ]
+            );
+            $notifiedUserIds[] = $supervisor->user->id;
+        }
+
+        // Notify department manager if not already notified
         $department = $leaveRequest->employee->department;
-        if ($department && $department->manager) {
+        if ($department && $department->manager && !in_array($department->manager->id, $notifiedUserIds)) {
             $this->sendEmail(
                 $department->manager->email,
                 'Leave Request Cancelled',
                 'emails.leave.cancelled',
                 [
                     'leaveRequest' => $leaveRequest,
+                    'recipientName' => $department->manager->name,
+                    'isEmployee' => false,
                 ]
             );
         }
@@ -168,6 +204,21 @@ class EmailService
             [
                 'user' => $user,
                 'loginUrl' => url('/magic-link/' . $token),
+            ]
+        );
+    }
+
+    public function sendBulkDeleteConfirmationEmail(User $admin, $usersToDelete, string $token): void
+    {
+        $this->sendEmail(
+            $admin->email,
+            'Confirm Bulk User Deletion',
+            'emails.bulk-delete-confirm',
+            [
+                'admin' => $admin,
+                'usersToDelete' => $usersToDelete,
+                'confirmUrl' => url('/users/bulk-delete/confirm/' . $token),
+                'count' => $usersToDelete->count(),
             ]
         );
     }
