@@ -1,8 +1,10 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Users } from 'lucide-react';
 
 export default function UserCreate({ departments, employeeTypes, roles, availableSupervisors = [] }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         email: '',
@@ -101,7 +103,7 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
                                     >
                                         {roles.map((role) => (
                                             <option key={role} value={role} className="capitalize">
-                                                {role.replace('_', ' ')}
+                                                {getRoleLabel(role)}
                                             </option>
                                         ))}
                                     </select>

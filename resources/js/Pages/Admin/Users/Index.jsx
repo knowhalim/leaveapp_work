@@ -4,6 +4,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Plus, Edit, Trash2, Eye, ToggleLeft, ToggleRight, Users, X, Briefcase } from 'lucide-react';
 
 function UpdateSupervisorsModal({ availableSupervisors, initialCheckedIds, onClose, onSubmit, processing }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const [checkedIds, setCheckedIds] = useState(initialCheckedIds);
     const [search, setSearch] = useState('');
 
@@ -65,7 +67,7 @@ function UpdateSupervisorsModal({ availableSupervisors, initialCheckedIds, onClo
                                         {sup.email}
                                         {sup.department ? ` · ${sup.department}` : ''}
                                         {' · '}
-                                        <span className="capitalize">{sup.role?.replace('_', ' ')}</span>
+                                        <span className="capitalize">{getRoleLabel(sup.role)}</span>
                                     </div>
                                 </div>
                             </label>
@@ -139,7 +141,8 @@ function EditPositionModal({ onClose, onSubmit, processing }) {
 }
 
 export default function UsersIndex({ users, filters, availableSupervisors, positions }) {
-    const { auth } = usePage().props;
+    const { auth, role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const [selectedIds, setSelectedIds] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [showPositionModal, setShowPositionModal] = useState(false);
@@ -266,10 +269,10 @@ export default function UsersIndex({ users, filters, availableSupervisors, posit
                         className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
                     >
                         <option value="all">All Roles</option>
-                        <option value="super_admin">Super Admin</option>
-                        <option value="admin">Admin</option>
-                        <option value="manager">Manager</option>
-                        <option value="employee">Employee</option>
+                        <option value="super_admin">{getRoleLabel('super_admin')}</option>
+                        <option value="admin">{getRoleLabel('admin')}</option>
+                        <option value="manager">{getRoleLabel('manager')}</option>
+                        <option value="employee">{getRoleLabel('employee')}</option>
                     </select>
                     <select
                         value={filters?.status || 'all'}
@@ -403,7 +406,7 @@ export default function UsersIndex({ users, filters, availableSupervisors, posit
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 capitalize">
-                                            {user.role?.replace('_', ' ')}
+                                            {getRoleLabel(user.role)}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

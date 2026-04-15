@@ -3,7 +3,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Calendar, Users } from 'lucide-react';
 
 export default function UserEdit({ user, departments, employeeTypes, roles, leaveBalances, financialYear, availableSupervisors = [], currentSupervisors = [] }) {
-    const { auth } = usePage().props;
+    const { auth, role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const roleIsLocked = auth.user.role === 'admin' && auth.user.id === user.id;
     const { data, setData, put, processing, errors } = useForm({
         name: user.name,
@@ -124,7 +125,7 @@ export default function UserEdit({ user, departments, employeeTypes, roles, leav
                                     >
                                         {roles.map((role) => (
                                             <option key={role} value={role} className="capitalize">
-                                                {role.replace('_', ' ')}
+                                                {getRoleLabel(role)}
                                             </option>
                                         ))}
                                     </select>
@@ -254,7 +255,7 @@ export default function UserEdit({ user, departments, employeeTypes, roles, leav
                                         <option value="" disabled>Select a supervisor to add...</option>
                                         {filteredSupervisors.map((sup) => (
                                             <option key={sup.id} value={sup.id}>
-                                                {sup.name} — {sup.role.replace('_', ' ')} {sup.department ? `(${sup.department})` : ''}
+                                                {sup.name} — {getRoleLabel(sup.role)} {sup.department ? `(${sup.department})` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -274,7 +275,7 @@ export default function UserEdit({ user, departments, employeeTypes, roles, leav
                                                         )}
                                                     </div>
                                                     <p className="text-xs text-gray-500">
-                                                        {sup.role.replace('_', ' ')} {sup.department ? `· ${sup.department}` : ''}
+                                                        {getRoleLabel(sup.role)} {sup.department ? `· ${sup.department}` : ''}
                                                     </p>
                                                 </div>
                                             </div>
