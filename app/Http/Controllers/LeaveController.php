@@ -191,9 +191,17 @@ class LeaveController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'code', 'color']);
 
+        $financialYear = \App\Models\SystemSetting::getFinancialYear();
+        $leaveBalances = \App\Models\EmployeeLeaveBalance::where('employee_id', $leave->employee_id)
+            ->where('financial_year', $financialYear)
+            ->get()
+            ->keyBy('leave_type_id')
+            ->map(fn($b) => $b->entitled_days + $b->carried_over + $b->adjustment - $b->used_days - $b->pending_days);
+
         return Inertia::render('Leave/Show', [
-            'leaveRequest' => $leave,
-            'leaveTypes'   => $leaveTypes,
+            'leaveRequest'  => $leave,
+            'leaveTypes'    => $leaveTypes,
+            'leaveBalances' => $leaveBalances,
         ]);
     }
 

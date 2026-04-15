@@ -4,7 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { formatDate, formatDateTime, getStatusColor } from '@/lib/utils';
 import { Check, X, MessageSquare, RefreshCw } from 'lucide-react';
 
-export default function LeaveShow({ leaveRequest, leaveTypes }) {
+export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances }) {
     const { auth } = usePage().props;
     const user = auth?.user;
     const isManager = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'manager';
@@ -296,6 +296,44 @@ export default function LeaveShow({ leaveRequest, leaveTypes }) {
                                     {convertForm.errors.leave_type_id && (
                                         <p className="mt-1 text-sm text-red-600">{convertForm.errors.leave_type_id}</p>
                                     )}
+                                    {/* Balance indicator */}
+                                    {convertForm.data.leave_type_id && (() => {
+                                        const selectedId = parseInt(convertForm.data.leave_type_id);
+                                        const available = leaveBalances?.[selectedId] ?? null;
+                                        const needed = leaveRequest.total_days;
+                                        if (available === null) {
+                                            return (
+                                                <p className="mt-2 text-sm text-amber-600">
+                                                    No balance record found for this leave type.
+                                                </p>
+                                            );
+                                        }
+                                        if (available <= 0) {
+                                            return (
+                                                <div className="mt-2 rounded-md bg-red-50 border border-red-200 p-3">
+                                                    <p className="text-sm font-medium text-red-700">Insufficient balance</p>
+                                                    <p className="text-sm text-red-600 mt-0.5">
+                                                        Available: <strong>0 days</strong> — this leave type has no remaining balance. Conversion will result in a negative balance.
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+                                        if (available < needed) {
+                                            return (
+                                                <div className="mt-2 rounded-md bg-amber-50 border border-amber-200 p-3">
+                                                    <p className="text-sm font-medium text-amber-700">Insufficient balance</p>
+                                                    <p className="text-sm text-amber-600 mt-0.5">
+                                                        Available: <strong>{available} day{available !== 1 ? 's' : ''}</strong>, needed: <strong>{needed} day{needed !== 1 ? 's' : ''}</strong>. Conversion will result in a negative balance.
+                                                    </p>
+                                                </div>
+                                            );
+                                        }
+                                        return (
+                                            <p className="mt-2 text-sm text-green-600">
+                                                Available balance: <strong>{available} day{available !== 1 ? 's' : ''}</strong> (needs {needed})
+                                            </p>
+                                        );
+                                    })()}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Reason for conversion</label>
@@ -326,7 +364,14 @@ export default function LeaveShow({ leaveRequest, leaveTypes }) {
                                     <button type="button" onClick={() => setShowConvertModal(false)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
                                         Cancel
                                     </button>
-                                    <button type="submit" disabled={convertForm.processing} className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
+                                    <button
+                                        type="submit"
+                                        disabled={convertForm.processing || (() => {
+                                            const id = parseInt(convertForm.data.leave_type_id);
+                                            return id && leaveBalances?.[id] !== undefined && leaveBalances[id] <= 0;
+                                        })()}
+                                        className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
                                         Convert
                                     </button>
                                 </div>
