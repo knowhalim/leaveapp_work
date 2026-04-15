@@ -192,16 +192,54 @@ class LeaveController extends Controller
             ->get(['id', 'name', 'code', 'color']);
 
         $financialYear = \App\Models\SystemSetting::getFinancialYear();
+
+        // All balances keyed by leave_type_id (for convert modal)
         $leaveBalances = \App\Models\EmployeeLeaveBalance::where('employee_id', $leave->employee_id)
             ->where('financial_year', $financialYear)
             ->get()
             ->keyBy('leave_type_id')
             ->map(fn($b) => $b->entitled_days + $b->carried_over + $b->adjustment - $b->used_days - $b->pending_days);
 
+        // Balance for this specific leave type
+        $leaveTypeBalance = \App\Models\EmployeeLeaveBalance::where('employee_id', $leave->employee_id)
+            ->where('leave_type_id', $leave->leave_type_id)
+            ->where('financial_year', $financialYear)
+            ->first();
+
+        // Other pending leave requests from this employee
+        $otherPendingLeave = \App\Models\LeaveRequest::where('employee_id', $leave->employee_id)
+            ->where('id', '!=', $leave->id)
+            ->where('status', 'pending')
+            ->with('leaveType')
+            ->orderBy('start_date')
+            ->get(['id', 'leave_type_id', 'start_date', 'end_date', 'total_days', 'status']);
+
+        // Upcoming approved leave for this employee
+        $upcomingLeave = \App\Models\LeaveRequest::where('employee_id', $leave->employee_id)
+            ->where('id', '!=', $leave->id)
+            ->where('status', 'approved')
+            ->where('end_date', '>=', now()->toDateString())
+            ->with('leaveType')
+            ->orderBy('start_date')
+            ->limit(5)
+            ->get(['id', 'leave_type_id', 'start_date', 'end_date', 'total_days', 'status']);
+
+        // Team members also on leave during the same period
+        $teamOnLeave = \App\Models\LeaveRequest::where('employee_id', '!=', $leave->employee_id)
+            ->where('status', 'approved')
+            ->where('start_date', '<=', $leave->end_date)
+            ->where('end_date', '>=', $leave->start_date)
+            ->with(['employee.user', 'leaveType'])
+            ->get(['id', 'employee_id', 'leave_type_id', 'start_date', 'end_date', 'total_days']);
+
         return Inertia::render('Leave/Show', [
-            'leaveRequest'  => $leave,
-            'leaveTypes'    => $leaveTypes,
-            'leaveBalances' => $leaveBalances,
+            'leaveRequest'      => $leave,
+            'leaveTypes'        => $leaveTypes,
+            'leaveBalances'     => $leaveBalances,
+            'leaveTypeBalance'  => $leaveTypeBalance,
+            'otherPendingLeave' => $otherPendingLeave,
+            'upcomingLeave'     => $upcomingLeave,
+            'teamOnLeave'       => $teamOnLeave,
         ]);
     }
 

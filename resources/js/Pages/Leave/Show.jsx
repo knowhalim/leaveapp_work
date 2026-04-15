@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Head, useForm, usePage, router } from '@inertiajs/react';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { formatDate, formatDateTime, getStatusColor } from '@/lib/utils';
-import { Check, X, MessageSquare, RefreshCw } from 'lucide-react';
+import { Check, X, MessageSquare, RefreshCw, AlertTriangle, Users, Calendar, Wallet } from 'lucide-react';
 
-export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances }) {
+export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, leaveTypeBalance, otherPendingLeave, upcomingLeave, teamOnLeave }) {
     const { auth } = usePage().props;
     const user = auth?.user;
     const isManager = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'manager';
@@ -171,6 +171,145 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances }) {
                         )}
                     </div>
                 </div>
+
+                {/* Approver Context — only shown to managers/admins */}
+                {isManager && (
+                    <div className="space-y-4">
+                        {/* Leave Balance for this type */}
+                        {leaveTypeBalance && (
+                            <div className="bg-white shadow rounded-lg p-5">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Wallet className="h-4 w-4 text-indigo-500" />
+                                    <h3 className="text-sm font-semibold text-gray-900">
+                                        {leaveRequest.employee?.user?.name}'s {leaveRequest.leave_type?.name} Balance
+                                    </h3>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                    {[
+                                        { label: 'Entitled', value: leaveTypeBalance.entitled_days },
+                                        { label: 'Carried Over', value: leaveTypeBalance.carried_over },
+                                        { label: 'Adjustment', value: leaveTypeBalance.adjustment, signed: true },
+                                        { label: 'Used', value: leaveTypeBalance.used_days, negative: true },
+                                        { label: 'Available', value: leaveTypeBalance.entitled_days + leaveTypeBalance.carried_over + leaveTypeBalance.adjustment - leaveTypeBalance.used_days - leaveTypeBalance.pending_days, highlight: true },
+                                    ].map(({ label, value, signed, negative, highlight }) => {
+                                        const available = leaveTypeBalance.entitled_days + leaveTypeBalance.carried_over + leaveTypeBalance.adjustment - leaveTypeBalance.used_days - leaveTypeBalance.pending_days;
+                                        const isLow = highlight && available <= leaveRequest.total_days;
+                                        return (
+                                            <div key={label} className={`rounded-lg p-3 text-center ${highlight ? (isLow ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200') : 'bg-gray-50'}`}>
+                                                <p className="text-xs text-gray-500 mb-1">{label}</p>
+                                                <p className={`text-lg font-bold ${highlight ? (isLow ? 'text-red-600' : 'text-green-600') : negative ? 'text-gray-700' : 'text-gray-900'}`}>
+                                                    {signed && value > 0 ? '+' : ''}{value}
+                                                </p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {(() => {
+                                    const available = leaveTypeBalance.entitled_days + leaveTypeBalance.carried_over + leaveTypeBalance.adjustment - leaveTypeBalance.used_days - leaveTypeBalance.pending_days;
+                                    if (available < leaveRequest.total_days) {
+                                        return (
+                                            <div className="mt-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+                                                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                                                Insufficient balance — employee has {available} day{available !== 1 ? 's' : ''} available but is requesting {leaveRequest.total_days} day{leaveRequest.total_days !== 1 ? 's' : ''}.
+                                            </div>
+                                        );
+                                    }
+                                    if (leaveTypeBalance.pending_days > 0) {
+                                        return (
+                                            <p className="mt-2 text-xs text-amber-600">
+                                                Note: {leaveTypeBalance.pending_days} day{leaveTypeBalance.pending_days !== 1 ? 's' : ''} are held by other pending requests.
+                                            </p>
+                                        );
+                                    }
+                                })()}
+                            </div>
+                        )}
+
+                        {/* Other pending + upcoming leave */}
+                        {(otherPendingLeave?.length > 0 || upcomingLeave?.length > 0) && (
+                            <div className="bg-white shadow rounded-lg p-5">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Calendar className="h-4 w-4 text-indigo-500" />
+                                    <h3 className="text-sm font-semibold text-gray-900">
+                                        {leaveRequest.employee?.user?.name}'s Other Leave
+                                    </h3>
+                                </div>
+
+                                {otherPendingLeave?.length > 0 && (
+                                    <div className="mb-4">
+                                        <p className="text-xs font-medium text-amber-700 uppercase tracking-wide mb-2">
+                                            Other Pending Requests ({otherPendingLeave.length})
+                                        </p>
+                                        <div className="space-y-2">
+                                            {otherPendingLeave.map(l => (
+                                                <div key={l.id} className="flex items-center justify-between text-sm bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: l.leave_type?.color }} />
+                                                        <span className="font-medium">{l.leave_type?.name}</span>
+                                                        <span className="text-gray-500">{formatDate(l.start_date)} – {formatDate(l.end_date)}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-gray-500">{l.total_days}d</span>
+                                                        <Link href={`/leaves/${l.id}`} className="text-indigo-600 hover:text-indigo-800 text-xs">View</Link>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {upcomingLeave?.length > 0 && (
+                                    <div>
+                                        <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-2">
+                                            Upcoming Approved Leave ({upcomingLeave.length})
+                                        </p>
+                                        <div className="space-y-2">
+                                            {upcomingLeave.map(l => (
+                                                <div key={l.id} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-100 rounded-md px-3 py-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: l.leave_type?.color }} />
+                                                        <span className="font-medium">{l.leave_type?.name}</span>
+                                                        <span className="text-gray-500">{formatDate(l.start_date)} – {formatDate(l.end_date)}</span>
+                                                    </div>
+                                                    <span className="text-gray-500 text-sm">{l.total_days}d</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Team absences during same period */}
+                        {teamOnLeave?.length > 0 && (
+                            <div className="bg-white shadow rounded-lg p-5">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Users className="h-4 w-4 text-indigo-500" />
+                                    <h3 className="text-sm font-semibold text-gray-900">
+                                        Others on Leave During This Period ({teamOnLeave.length})
+                                    </h3>
+                                </div>
+                                <div className="space-y-2">
+                                    {teamOnLeave.map(l => (
+                                        <div key={l.id} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-100 rounded-md px-3 py-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                                                    <span className="text-xs font-medium text-indigo-700">
+                                                        {l.employee?.user?.name?.charAt(0)?.toUpperCase()}
+                                                    </span>
+                                                </div>
+                                                <span className="font-medium">{l.employee?.user?.name}</span>
+                                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: l.leave_type?.color }} />
+                                                <span className="text-gray-500">{l.leave_type?.name}</span>
+                                            </div>
+                                            <span className="text-gray-500">{formatDate(l.start_date)} – {formatDate(l.end_date)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Comments */}
                 <div className="bg-white shadow rounded-lg">
