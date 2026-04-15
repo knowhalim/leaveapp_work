@@ -122,19 +122,32 @@ export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, f
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             >
                                 <option value="">Select leave type</option>
-                                {leaveTypes.map((type) => (
-                                    <option key={type.id} value={type.id}>
-                                        {type.name} ({type.code})
-                                    </option>
-                                ))}
+                                {leaveTypes
+                                    .filter((type) => {
+                                        const bal = leaveBalances.find(b => b.leave_type_id === type.id);
+                                        // Hide if a balance record exists and available is 0 or less
+                                        if (!bal) return true; // no balance record = unlimited (e.g. Unpaid Leave)
+                                        const available = bal.entitled_days + bal.carried_over + bal.adjustment - bal.used_days - bal.pending_days;
+                                        return available > 0;
+                                    })
+                                    .map((type) => {
+                                        const bal = leaveBalances.find(b => b.leave_type_id === type.id);
+                                        const available = bal
+                                            ? bal.entitled_days + bal.carried_over + bal.adjustment - bal.used_days - bal.pending_days
+                                            : null;
+                                        const label = available !== null
+                                            ? `${type.name} (${available} day${available !== 1 ? 's' : ''} left)`
+                                            : type.name;
+                                        return (
+                                            <option key={type.id} value={type.id}>
+                                                {label}
+                                            </option>
+                                        );
+                                    })
+                                }
                             </select>
                             {errors.leave_type_id && (
                                 <p className="mt-1 text-sm text-red-600">{errors.leave_type_id}</p>
-                            )}
-                            {selectedBalance && (
-                                <p className="mt-1 text-sm text-gray-500">
-                                    Available: {selectedBalance.entitled_days + selectedBalance.carried_over + selectedBalance.adjustment - selectedBalance.used_days - selectedBalance.pending_days} days
-                                </p>
                             )}
                         </div>
 
