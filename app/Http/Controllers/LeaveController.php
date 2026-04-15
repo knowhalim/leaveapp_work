@@ -81,15 +81,44 @@ class LeaveController extends Controller
             ->with('leaveType')
             ->get();
 
-        // Admin/manager can apply on behalf of any active employee
+        // Admins can apply for anyone; managers only for their direct reports
         $employees = null;
-        if ($user->isAdmin() || $user->isManager()) {
+        if ($user->isAdmin()) {
+            // Admin/super_admin: all active employees except themselves
             $employees = Employee::whereHas('user', fn ($q) => $q->where('is_active', true))
+                ->where('id', '!=', $employee?->id)
                 ->with('user')
                 ->get()
                 ->map(fn ($emp) => [
-                    'id' => $emp->id,
-                    'name' => $emp->user->name,
+                    'id'    => $emp->id,
+                    'name'  => $emp->user->name,
+                    'email' => $emp->user->email,
+                ]);
+        } elseif ($user->isManager() && $employee) {
+            // Manager: only employees in their managed departments OR assigned as their subordinate
+            // Also exclude anyone with role admin/super_admin/manager
+            // Employees in departments this manager manages
+            $deptEmployeeIds = Employee::whereHas('department', function ($q) use ($employee) {
+                    $q->where('manager_id', $employee->id);
+                })
+                ->pluck('id');
+
+            // Employees this manager is assigned as supervisor to
+            $subordinateIds = \DB::table('employee_supervisors')
+                ->where('supervisor_id', $employee->id)
+                ->pluck('employee_id');
+
+            $allowedIds = $deptEmployeeIds->merge($subordinateIds)->unique()->values();
+
+            $employees = Employee::whereIn('id', $allowedIds)
+                ->where('id', '!=', $employee->id)
+                ->whereHas('user', fn ($q) => $q->where('is_active', true)
+                    ->whereNotIn('role', ['admin', 'super_admin', 'manager']))
+                ->with('user')
+                ->get()
+                ->map(fn ($emp) => [
+                    'id'    => $emp->id,
+                    'name'  => $emp->user->name,
                     'email' => $emp->user->email,
                 ]);
         }
@@ -122,7 +151,21 @@ class LeaveController extends Controller
 
         // Admin/manager can apply on behalf; otherwise use own employee record
         if (!empty($validated['employee_id']) && ($user->isAdmin() || $user->isManager())) {
-            $employee = Employee::findOrFail($validated['employee_id']);
+            $targetEmployee = Employee::findOrFail($validated['employee_id']);
+
+            // Managers: verify the target is within their allowed scope
+            if (!$user->isAdmin()) {
+                $managerEmployee = $user->employee;
+                $deptIds = Employee::whereHas('department', fn ($q) => $q->where('manager_id', $managerEmployee->id))->pluck('id');
+                $subIds  = \DB::table('employee_supervisors')->where('supervisor_id', $managerEmployee->id)->pluck('employee_id');
+                $allowed = $deptIds->merge($subIds)->unique();
+
+                if (!$allowed->contains($targetEmployee->id)) {
+                    return back()->with('error', 'You are not authorised to apply leave on behalf of this employee.');
+                }
+            }
+
+            $employee = $targetEmployee;
         } else {
             $employee = $user->employee;
         }
