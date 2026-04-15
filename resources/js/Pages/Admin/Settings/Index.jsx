@@ -39,6 +39,10 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
         weekends: settings.weekends || ['saturday', 'sunday'],
         max_carry_forward: settings.max_carry_forward || 5,
         leave_year_start_month: settings.leave_year_start_month || 1,
+        role_label_employee: settings.role_label_employee || 'Employee',
+        role_label_manager: settings.role_label_manager || 'Manager',
+        role_label_admin: settings.role_label_admin || 'Admin',
+        role_label_super_admin: settings.role_label_super_admin || 'Super Admin',
     });
 
     const weekdays = [
@@ -236,6 +240,34 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
                         {errors.weekends && (
                             <p className="mt-2 text-sm text-red-600">{errors.weekends}</p>
                         )}
+                    </div>
+
+                    {/* Role Labels */}
+                    <div className="p-6">
+                        <h3 className="text-lg font-medium text-gray-900 mb-1">Role Labels</h3>
+                        <p className="text-sm text-gray-500 mb-4">Customise how roles are displayed throughout the system (e.g. rename "Manager" to "Mentor").</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[
+                                { key: 'role_label_employee', default: 'Employee' },
+                                { key: 'role_label_manager', default: 'Manager' },
+                                { key: 'role_label_admin', default: 'Admin' },
+                                { key: 'role_label_super_admin', default: 'Super Admin' },
+                            ].map(({ key, default: def }) => (
+                                <div key={key}>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {def} Label
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={data[key]}
+                                        onChange={(e) => setData(key, e.target.value)}
+                                        placeholder={def}
+                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                                    />
+                                    {errors[key] && <p className="mt-1 text-sm text-red-600">{errors[key]}</p>}
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
                     {/* Submit Button */}

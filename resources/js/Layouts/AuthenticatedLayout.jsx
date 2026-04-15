@@ -21,7 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 
 export default function AuthenticatedLayout({ children, title }) {
-    const { auth, company_name } = usePage().props;
+    const { auth, company_name, role_labels } = usePage().props;
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -30,11 +30,14 @@ export default function AuthenticatedLayout({ children, title }) {
     const isSuperAdmin = user?.role === 'super_admin';
     const isManager = isAdmin || user?.role === 'manager';
 
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
+
     const navigation = [
         { name: 'Dashboard', href: '/dashboard', icon: Home, show: true },
         { name: 'My Leave', href: '/leaves', icon: Calendar, show: true },
         { name: 'My Balances', href: '/my-balances', icon: FileText, show: true },
         { name: 'Pending Approvals', href: '/leaves/pending', icon: Bell, show: isManager },
+        { name: 'My Team', href: '/manager/team', icon: Users, show: isManager },
         { name: 'Users', href: '/users', icon: Users, show: isAdmin },
         { name: 'Batch Import', href: '/users/batch-import', icon: FileUp, show: isManager },
         { name: 'Departments', href: '/departments', icon: Building2, show: isAdmin },
@@ -110,7 +113,7 @@ export default function AuthenticatedLayout({ children, title }) {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
-                                <p className="text-xs text-gray-500 truncate capitalize">{user?.role?.replace('_', ' ')}</p>
+                                <p className="text-xs text-gray-500 truncate capitalize">{getRoleLabel(user?.role)}</p>
                             </div>
                         </div>
                     </div>

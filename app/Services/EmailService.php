@@ -208,6 +208,55 @@ class EmailService
         );
     }
 
+    public function sendPendingLeaveReminder(LeaveRequest $leaveRequest): void
+    {
+        $leaveRequest->load(['employee.user', 'employee.supervisors.user', 'employee.department', 'leaveType']);
+        $employeeUser = $leaveRequest->employee->user;
+        $daysPending = $leaveRequest->created_at->diffInDays(now());
+
+        $notifiedIds = [];
+
+        foreach ($leaveRequest->employee->supervisors as $supervisor) {
+            if (!$supervisor->user) continue;
+            $this->sendEmail(
+                $supervisor->user->email,
+                'Reminder: Leave Request Awaiting Your Approval',
+                'emails.leave.reminder-pending',
+                ['leaveRequest' => $leaveRequest, 'recipient' => $supervisor->user, 'daysPending' => $daysPending]
+            );
+            $notifiedIds[] = $supervisor->user->id;
+        }
+
+        $dept = $leaveRequest->employee->department;
+        if ($dept && $dept->manager && !in_array($dept->manager->id, $notifiedIds)) {
+            $this->sendEmail(
+                $dept->manager->email,
+                'Reminder: Leave Request Awaiting Your Approval',
+                'emails.leave.reminder-pending',
+                ['leaveRequest' => $leaveRequest, 'recipient' => $dept->manager, 'daysPending' => $daysPending]
+            );
+        }
+    }
+
+    public function sendPendingLeaveAdminEscalation(LeaveRequest $leaveRequest): void
+    {
+        $leaveRequest->load(['employee.user', 'leaveType']);
+        $daysPending = $leaveRequest->created_at->diffInDays(now());
+
+        $admins = User::where('is_active', true)
+            ->whereIn('role', ['admin', 'super_admin'])
+            ->get();
+
+        foreach ($admins as $admin) {
+            $this->sendEmail(
+                $admin->email,
+                'Action Required: Leave Request Has Not Been Approved',
+                'emails.leave.admin-escalation',
+                ['leaveRequest' => $leaveRequest, 'admin' => $admin, 'daysPending' => $daysPending]
+            );
+        }
+    }
+
     public function sendBulkDeleteConfirmationEmail(User $admin, $usersToDelete, string $token): void
     {
         $this->sendEmail(

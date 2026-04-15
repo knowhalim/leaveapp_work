@@ -30,6 +30,10 @@ Schedule::command('app:rollover-leave-year')
         }
     });
 
+// Pending leave reminders — runs daily at 09:00
+Schedule::command('app:send-pending-leave-reminders')
+    ->dailyAt('09:00');
+
 // Daily backup
 // SystemSetting::get() is evaluated immediately as a dailyAt() argument (not lazy),
 // so guard against fresh installs where system_settings table doesn't exist yet.

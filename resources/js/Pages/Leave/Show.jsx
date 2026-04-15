@@ -2,20 +2,23 @@ import { useState } from 'react';
 import { Head, useForm, usePage, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { formatDate, formatDateTime, getStatusColor } from '@/lib/utils';
-import { Check, X, MessageSquare } from 'lucide-react';
+import { Check, X, MessageSquare, RefreshCw } from 'lucide-react';
 
-export default function LeaveShow({ leaveRequest }) {
+export default function LeaveShow({ leaveRequest, leaveTypes }) {
     const { auth } = usePage().props;
     const user = auth?.user;
     const isManager = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'manager';
     const isOwner = leaveRequest.employee?.user_id === user?.id;
+    const canCancel = (isOwner || isManager) && (leaveRequest.status === 'pending' || leaveRequest.status === 'approved');
 
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
+    const [showConvertModal, setShowConvertModal] = useState(false);
 
     const approveForm = useForm({ notes: '' });
     const rejectForm = useForm({ notes: '' });
     const commentForm = useForm({ comment: '', is_internal: false });
+    const convertForm = useForm({ leave_type_id: '', reason: '', attachment: null });
 
     const handleApprove = (e) => {
         e.preventDefault();
@@ -35,6 +38,13 @@ export default function LeaveShow({ leaveRequest }) {
         if (confirm('Are you sure you want to cancel this leave request?')) {
             router.post(`/leaves/${leaveRequest.id}/cancel`);
         }
+    };
+
+    const handleConvert = (e) => {
+        e.preventDefault();
+        convertForm.post(`/leaves/${leaveRequest.id}/convert`, {
+            onSuccess: () => setShowConvertModal(false),
+        });
     };
 
     const handleComment = (e) => {
@@ -123,7 +133,7 @@ export default function LeaveShow({ leaveRequest }) {
                     </div>
 
                     {/* Actions */}
-                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3">
+                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-wrap gap-3">
                         {isManager && leaveRequest.status === 'pending' && (
                             <>
                                 <button
@@ -142,7 +152,16 @@ export default function LeaveShow({ leaveRequest }) {
                                 </button>
                             </>
                         )}
-                        {(isOwner || isManager) && (leaveRequest.status === 'pending' || (leaveRequest.status === 'approved' && new Date(leaveRequest.start_date) > new Date())) && (
+                        {leaveRequest.status === 'approved' && (isOwner || isManager) && leaveTypes?.length > 0 && (
+                            <button
+                                onClick={() => setShowConvertModal(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2 border border-indigo-300 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                            >
+                                <RefreshCw className="h-4 w-4" />
+                                Convert Leave Type
+                            </button>
+                        )}
+                        {canCancel && (
                             <button
                                 onClick={handleCancel}
                                 className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
@@ -240,6 +259,75 @@ export default function LeaveShow({ leaveRequest }) {
                                     </button>
                                     <button type="submit" disabled={approveForm.processing} className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50">
                                         Approve
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Convert Modal */}
+            {showConvertModal && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen px-4">
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowConvertModal(false)} />
+                        <div className="relative bg-white rounded-lg max-w-md w-full p-6">
+                            <h3 className="text-lg font-medium text-gray-900 mb-4">Convert Leave Type</h3>
+                            <p className="text-sm text-gray-500 mb-4">
+                                Convert this approved leave to a different leave type. The original leave type balance will be restored and the new type balance will be deducted.
+                            </p>
+                            <form onSubmit={handleConvert} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">New Leave Type</label>
+                                    <select
+                                        value={convertForm.data.leave_type_id}
+                                        onChange={(e) => convertForm.setData('leave_type_id', e.target.value)}
+                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                                        required
+                                    >
+                                        <option value="">Select leave type</option>
+                                        {leaveTypes?.map((type) => (
+                                            <option key={type.id} value={type.id}>
+                                                {type.name} ({type.code})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {convertForm.errors.leave_type_id && (
+                                        <p className="mt-1 text-sm text-red-600">{convertForm.errors.leave_type_id}</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Reason for conversion</label>
+                                    <textarea
+                                        value={convertForm.data.reason}
+                                        onChange={(e) => convertForm.setData('reason', e.target.value)}
+                                        rows={3}
+                                        placeholder="Explain why the leave type is being changed"
+                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                                        required
+                                    />
+                                    {convertForm.errors.reason && (
+                                        <p className="mt-1 text-sm text-red-600">{convertForm.errors.reason}</p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Attachment (optional)</label>
+                                    <input
+                                        type="file"
+                                        onChange={(e) => convertForm.setData('attachment', e.target.files[0])}
+                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                                    />
+                                    {convertForm.errors.attachment && (
+                                        <p className="mt-1 text-sm text-red-600">{convertForm.errors.attachment}</p>
+                                    )}
+                                </div>
+                                <div className="flex justify-end gap-3">
+                                    <button type="button" onClick={() => setShowConvertModal(false)} className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                        Cancel
+                                    </button>
+                                    <button type="submit" disabled={convertForm.processing} className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">
+                                        Convert
                                     </button>
                                 </div>
                             </form>

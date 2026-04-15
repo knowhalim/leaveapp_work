@@ -8,6 +8,7 @@ use App\Http\Controllers\GoogleDriveController;
 use App\Http\Controllers\LeaveBalanceController;
 use App\Http\Controllers\LeaveController;
 use App\Http\Controllers\LeaveTypeController;
+use App\Http\Controllers\ManagerTeamController;
 use App\Http\Controllers\MassEmailController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
@@ -50,6 +51,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         ->name('manager.dashboard')
         ->middleware('role:super_admin,admin,manager');
 
+    Route::get('/manager/team', [ManagerTeamController::class, 'team'])
+        ->name('manager.team')
+        ->middleware('role:super_admin,admin,manager');
+
     Route::get('/employee', [DashboardController::class, 'employee'])
         ->name('employee.dashboard');
 
@@ -80,11 +85,18 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('/{leave}/approve', [LeaveController::class, 'approve'])->name('approve')->middleware('role:super_admin,admin,manager');
         Route::post('/{leave}/reject', [LeaveController::class, 'reject'])->name('reject')->middleware('role:super_admin,admin,manager');
         Route::post('/{leave}/cancel', [LeaveController::class, 'cancel'])->name('cancel');
+        Route::post('/{leave}/convert', [LeaveController::class, 'convert'])->name('convert');
         Route::post('/{leave}/comment', [LeaveController::class, 'addComment'])->name('comment');
     });
 
     // My Leave Balances (employees)
     Route::get('/my-balances', [LeaveBalanceController::class, 'myBalances'])->name('my-balances');
+
+    // Employee balances API for on-behalf leave apply
+    Route::get('/api/employee-balances/{employee}', function (\App\Models\Employee $employee) {
+        $year = \App\Models\SystemSetting::getFinancialYear();
+        return $employee->leaveBalances()->where('financial_year', $year)->with('leaveType')->get();
+    })->middleware('role:super_admin,admin,manager');
 
     // Batch import (accessible by managers too)
     Route::middleware('role:super_admin,admin,manager')->group(function () {

@@ -72,7 +72,8 @@ class LeaveController extends Controller
 
     public function create()
     {
-        $employee = auth()->user()->employee;
+        $user = auth()->user();
+        $employee = $user->employee;
         $financialYear = SystemSetting::getFinancialYear();
 
         $leaveBalances = $employee->leaveBalances()
@@ -80,15 +81,31 @@ class LeaveController extends Controller
             ->with('leaveType')
             ->get();
 
+        // Admin/manager can apply on behalf of any active employee
+        $employees = null;
+        if ($user->isAdmin() || $user->isManager()) {
+            $employees = Employee::whereHas('user', fn ($q) => $q->where('is_active', true))
+                ->with('user')
+                ->get()
+                ->map(fn ($emp) => [
+                    'id' => $emp->id,
+                    'name' => $emp->user->name,
+                    'email' => $emp->user->email,
+                ]);
+        }
+
         return Inertia::render('Leave/Create', [
             'leaveTypes' => LeaveType::active()->get(),
             'leaveBalances' => $leaveBalances,
             'financialYear' => $financialYear,
+            'employees' => $employees,
+            'selfEmployeeId' => $employee?->id,
         ]);
     }
 
     public function store(Request $request)
     {
+        $user = auth()->user();
         $leaveType = LeaveType::findOrFail($request->leave_type_id);
         $minDate = now()->subDays($leaveType->max_backdate_days ?? 0)->format('Y-m-d');
 
@@ -100,9 +117,15 @@ class LeaveController extends Controller
             'end_half' => ['required', 'in:full,first_half,second_half'],
             'reason' => ['nullable', 'string', 'max:1000'],
             'attachment' => ['nullable', 'file', 'max:5120'],
+            'employee_id' => ['nullable', 'exists:employees,id'],
         ]);
 
-        $employee = auth()->user()->employee;
+        // Admin/manager can apply on behalf; otherwise use own employee record
+        if (!empty($validated['employee_id']) && ($user->isAdmin() || $user->isManager())) {
+            $employee = Employee::findOrFail($validated['employee_id']);
+        } else {
+            $employee = $user->employee;
+        }
         $financialYear = SystemSetting::getFinancialYear();
 
         $totalDays = $this->calculationService->calculateLeaveDays(
@@ -163,8 +186,14 @@ class LeaveController extends Controller
     {
         $leave->load(['employee.user', 'leaveType', 'approver', 'comments.user']);
 
+        $leaveTypes = \App\Models\LeaveType::where('is_active', true)
+            ->where('id', '!=', $leave->leave_type_id)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'color']);
+
         return Inertia::render('Leave/Show', [
             'leaveRequest' => $leave,
+            'leaveTypes'   => $leaveTypes,
         ]);
     }
 
@@ -283,6 +312,75 @@ class LeaveController extends Controller
         $this->emailService->sendLeaveCancelledNotification($leave);
 
         return back()->with('success', 'Leave request cancelled.');
+    }
+
+    public function convert(Request $request, LeaveRequest $leave)
+    {
+        $user = auth()->user();
+
+        // Only owner or admin/manager can convert
+        if ($leave->employee->user_id !== $user->id && !$user->isAdmin() && !$user->isManager()) {
+            return back()->with('error', 'You are not authorized to convert this leave request.');
+        }
+
+        if (!$leave->isApproved()) {
+            return back()->with('error', 'Only approved leave can be converted.');
+        }
+
+        if ($leave->leave_type_id == $request->leave_type_id) {
+            return back()->with('error', 'Please select a different leave type to convert to.');
+        }
+
+        $newLeaveType = LeaveType::findOrFail($request->validate([
+            'leave_type_id' => ['required', 'exists:leave_types,id'],
+            'reason' => ['nullable', 'string', 'max:1000'],
+            'attachment' => ['nullable', 'file', 'max:5120'],
+        ])['leave_type_id']);
+
+        $financialYear = $leave->financial_year;
+
+        DB::transaction(function () use ($leave, $newLeaveType, $request, $financialYear, $user) {
+            $days = $leave->total_days;
+
+            // Restore original leave balance
+            $originalBalance = EmployeeLeaveBalance::where('employee_id', $leave->employee_id)
+                ->where('leave_type_id', $leave->leave_type_id)
+                ->where('financial_year', $financialYear)
+                ->first();
+            if ($originalBalance) {
+                $originalBalance->decrement('used_days', $days);
+            }
+
+            // Deduct from new leave type balance
+            $newBalance = EmployeeLeaveBalance::where('employee_id', $leave->employee_id)
+                ->where('leave_type_id', $newLeaveType->id)
+                ->where('financial_year', $financialYear)
+                ->first();
+            if ($newBalance) {
+                $newBalance->increment('used_days', $days);
+            }
+
+            // Handle new attachment if provided
+            $attachmentPath = $leave->attachment_path;
+            if ($request->hasFile('attachment')) {
+                $attachmentPath = $request->file('attachment')->store('leave-attachments', 'public');
+            }
+
+            $leave->update([
+                'leave_type_id' => $newLeaveType->id,
+                'reason' => $request->reason ?: $leave->reason,
+                'attachment_path' => $attachmentPath,
+                'approved_by' => $user->id,
+                'approved_at' => now(),
+            ]);
+
+            ActivityLog::log('leave.converted', $leave, [
+                'converted_by' => $user->id,
+                'new_leave_type' => $newLeaveType->name,
+            ]);
+        });
+
+        return back()->with('success', 'Leave converted to ' . $newLeaveType->name . ' successfully.');
     }
 
     public function addComment(Request $request, LeaveRequest $leave)

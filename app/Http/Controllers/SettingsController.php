@@ -20,6 +20,10 @@ class SettingsController extends Controller
             'weekends' => SystemSetting::get('weekends', ['saturday', 'sunday']),
             'max_carry_forward' => SystemSetting::get('max_carry_forward', 5),
             'leave_year_start_month' => SystemSetting::get('leave_year_start_month', 1),
+            'role_label_employee' => SystemSetting::get('role_label_employee', 'Employee'),
+            'role_label_manager' => SystemSetting::get('role_label_manager', 'Manager'),
+            'role_label_admin' => SystemSetting::get('role_label_admin', 'Admin'),
+            'role_label_super_admin' => SystemSetting::get('role_label_super_admin', 'Super Admin'),
         ];
 
         $apiTokens = [];
@@ -45,6 +49,10 @@ class SettingsController extends Controller
             'weekends.*' => ['string', 'in:sunday,monday,tuesday,wednesday,thursday,friday,saturday'],
             'max_carry_forward' => ['required', 'integer', 'min:0'],
             'leave_year_start_month' => ['required', 'integer', 'min:1', 'max:12'],
+            'role_label_employee' => ['required', 'string', 'max:50'],
+            'role_label_manager' => ['required', 'string', 'max:50'],
+            'role_label_admin' => ['required', 'string', 'max:50'],
+            'role_label_super_admin' => ['required', 'string', 'max:50'],
         ]);
 
         foreach ($validated as $key => $value) {

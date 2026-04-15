@@ -20,6 +20,12 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'company_name' => fn () => SystemSetting::getCompanyName(),
+            'role_labels' => fn () => [
+                'employee'  => SystemSetting::get('role_label_employee', 'Employee'),
+                'manager'   => SystemSetting::get('role_label_manager', 'Manager'),
+                'admin'     => SystemSetting::get('role_label_admin', 'Admin'),
+                'super_admin' => SystemSetting::get('role_label_super_admin', 'Super Admin'),
+            ],
             'auth' => [
                 'user' => $request->user() ? [
                     'id' => $request->user()->id,

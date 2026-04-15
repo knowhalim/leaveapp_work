@@ -1,7 +1,12 @@
-import { Head, useForm } from '@inertiajs/react';
+import { useState, useEffect } from 'react';
+import { Head, useForm, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
-export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }) {
+export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, financialYear, employees, selfEmployeeId }) {
+    const isOnBehalf = employees && employees.length > 0;
+    const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+    const [leaveBalances, setLeaveBalances] = useState(selfBalances);
+
     const { data, setData, post, processing, errors } = useForm({
         leave_type_id: '',
         start_date: '',
@@ -10,7 +15,21 @@ export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }
         end_half: 'full',
         reason: '',
         attachment: null,
+        employee_id: '',
     });
+
+    // When selected employee changes, fetch their leave balances
+    useEffect(() => {
+        if (!selectedEmployeeId || selectedEmployeeId == selfEmployeeId) {
+            setLeaveBalances(selfBalances);
+            setData('employee_id', '');
+            return;
+        }
+        setData('employee_id', selectedEmployeeId);
+        window.axios.get(`/api/employee-balances/${selectedEmployeeId}`)
+            .then(res => setLeaveBalances(res.data))
+            .catch(() => setLeaveBalances([]));
+    }, [selectedEmployeeId]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -71,6 +90,27 @@ export default function LeaveCreate({ leaveTypes, leaveBalances, financialYear }
             <div className="max-w-2xl mx-auto">
                 <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg">
                     <div className="p-6 space-y-6">
+                        {/* Apply on behalf (admin/manager only) */}
+                        {isOnBehalf && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">
+                                    Apply on behalf of
+                                </label>
+                                <select
+                                    value={selectedEmployeeId}
+                                    onChange={e => setSelectedEmployeeId(e.target.value)}
+                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="">Myself</option>
+                                    {employees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>
+                                            {emp.name} ({emp.email})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
                         {/* Leave Type */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700">

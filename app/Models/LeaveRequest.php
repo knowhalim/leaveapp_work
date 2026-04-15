@@ -80,7 +80,9 @@ class LeaveRequest extends Model
 
     public function canBeCancelled(): bool
     {
-        return $this->isPending() || ($this->isApproved() && $this->start_date->isFuture());
+        // Pending: always cancellable
+        // Approved: cancellable anytime (including past dates, e.g. to swap to MC)
+        return $this->isPending() || $this->isApproved();
     }
 
     public function scopePending($query)
