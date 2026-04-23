@@ -1,8 +1,10 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Edit, Users, Building2 } from 'lucide-react';
 
 export default function DepartmentShow({ department, stats }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     return (
         <AuthenticatedLayout title={`Department: ${department.name}`}>
             <Head title={department.name} />
@@ -18,7 +20,7 @@ export default function DepartmentShow({ department, stats }) {
                             <div>
                                 <h3 className="text-lg font-medium text-gray-900">{department.name}</h3>
                                 <p className="text-sm text-gray-500">
-                                    Manager: {department.manager?.name || 'Not assigned'}
+                                    {getRoleLabel('manager')}: {department.manager?.name || 'Not assigned'}
                                 </p>
                             </div>
                         </div>
@@ -33,11 +35,11 @@ export default function DepartmentShow({ department, stats }) {
                     <div className="p-6">
                         <div className="grid grid-cols-2 gap-6">
                             <div className="bg-blue-50 rounded-lg p-4">
-                                <dt className="text-sm font-medium text-blue-700">Total Employees</dt>
+                                <dt className="text-sm font-medium text-blue-700">Total {getRoleLabel('employee')}s</dt>
                                 <dd className="mt-1 text-2xl font-semibold text-blue-900">{stats.totalEmployees}</dd>
                             </div>
                             <div className="bg-green-50 rounded-lg p-4">
-                                <dt className="text-sm font-medium text-green-700">Active Employees</dt>
+                                <dt className="text-sm font-medium text-green-700">Active {getRoleLabel('employee')}s</dt>
                                 <dd className="mt-1 text-2xl font-semibold text-green-900">{stats.activeEmployees}</dd>
                             </div>
                         </div>
@@ -47,11 +49,11 @@ export default function DepartmentShow({ department, stats }) {
                 {/* Employees List */}
                 <div className="bg-white shadow rounded-lg">
                     <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-                        <h3 className="text-lg font-medium text-gray-900">Department Employees</h3>
+                        <h3 className="text-lg font-medium text-gray-900">Department {getRoleLabel('employee')}s</h3>
                     </div>
                     <ul className="divide-y divide-gray-200">
                         {department.employees?.length === 0 ? (
-                            <li className="px-4 py-4 text-sm text-gray-500">No employees in this department</li>
+                            <li className="px-4 py-4 text-sm text-gray-500">No {getRoleLabel('employee')}s in this department</li>
                         ) : (
                             department.employees?.map((employee) => (
                                 <li key={employee.id} className="px-4 py-4">

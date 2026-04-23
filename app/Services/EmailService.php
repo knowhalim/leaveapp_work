@@ -184,15 +184,91 @@ class EmailService
 
     public function sendWelcomeEmail(User $user, string $temporaryPassword = null): void
     {
+        $roleDefaults = [
+            'employee' => 'Employee',
+            'manager' => 'Manager',
+            'admin' => 'Admin',
+            'super_admin' => 'Super Admin',
+        ];
+        $roleLabel = \App\Models\SystemSetting::get(
+            'role_label_' . $user->role,
+            $roleDefaults[$user->role] ?? ucwords(str_replace('_', ' ', $user->role))
+        );
+
+        $passwordLoginEnabled = (bool) \App\Models\SystemSetting::get('password_login_enabled', true);
+
+        $onboardingHtml = $this->renderOnboardingHtml($user, $roleLabel);
+
         $this->sendEmail(
             $user->email,
             'Welcome to ' . \App\Models\SystemSetting::getCompanyName(),
             'emails.welcome',
             [
                 'user' => $user,
-                'temporaryPassword' => $temporaryPassword,
+                'temporaryPassword' => $passwordLoginEnabled ? $temporaryPassword : null,
+                'roleLabel' => $roleLabel,
+                'passwordLoginEnabled' => $passwordLoginEnabled,
+                'loginUrl' => url('/login'),
+                'onboardingHtml' => $onboardingHtml,
             ]
         );
+    }
+
+    public function sendRoleChangedEmail(User $user, string $oldRole, User $changedBy): void
+    {
+        $roleDefaults = [
+            'employee' => 'Employee',
+            'manager' => 'Manager',
+            'admin' => 'Admin',
+            'super_admin' => 'Super Admin',
+        ];
+        $label = fn (string $role) => \App\Models\SystemSetting::get(
+            'role_label_' . $role,
+            $roleDefaults[$role] ?? ucwords(str_replace('_', ' ', $role))
+        );
+        $newRoleLabel = $label($user->role);
+        $oldRoleLabel = $label($oldRole);
+
+        $onboardingHtml = $this->renderOnboardingHtml($user, $newRoleLabel);
+
+        $this->sendEmail(
+            $user->email,
+            'Your role has been updated - ' . \App\Models\SystemSetting::getCompanyName(),
+            'emails.role-changed',
+            [
+                'user' => $user,
+                'oldRoleLabel' => $oldRoleLabel,
+                'newRoleLabel' => $newRoleLabel,
+                'changedByName' => $changedBy->name,
+                'loginUrl' => url('/login'),
+                'onboardingHtml' => $onboardingHtml,
+            ]
+        );
+    }
+
+    protected function renderOnboardingHtml(User $user, string $roleLabel): string
+    {
+        $role = $user->role;
+        $customEnabled = (bool) \App\Models\SystemSetting::get("onboarding_custom_{$role}_enabled", false);
+
+        if ($customEnabled) {
+            $body = (string) \App\Models\SystemSetting::get("onboarding_custom_{$role}_body", '');
+            if ($body !== '') {
+                return strtr($body, [
+                    '{{role}}'    => e($roleLabel),
+                    '{{company}}' => e(\App\Models\SystemSetting::getCompanyName()),
+                    '{{name}}'    => e($user->name),
+                    '{{email}}'   => e($user->email),
+                ]);
+            }
+        }
+
+        $partial = 'emails.onboarding.' . str_replace('_', '-', $role);
+        if (!view()->exists($partial)) {
+            return '';
+        }
+
+        return view($partial, ['roleLabel' => $roleLabel])->render();
     }
 
     public function sendMagicLinkEmail(User $user, string $token): void

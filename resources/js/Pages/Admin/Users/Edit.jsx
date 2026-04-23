@@ -145,7 +145,7 @@ export default function UserEdit({ user, departments, employeeTypes, roles, leav
                                 </div>
                             </div>
 
-                            <h3 className="text-lg font-medium text-gray-900 border-b pb-3 pt-4">Employee Information</h3>
+                            <h3 className="text-lg font-medium text-gray-900 border-b pb-3 pt-4">User Information</h3>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -241,7 +241,7 @@ export default function UserEdit({ user, departments, employeeTypes, roles, leav
                     <div className="bg-white shadow rounded-lg">
                         <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
                             <Users className="h-5 w-5 text-indigo-600" />
-                            <h3 className="text-lg font-medium text-gray-900">Supervisors</h3>
+                            <h3 className="text-lg font-medium text-gray-900">Supervisors <span className="text-sm font-normal text-gray-500">(Leave Approver)</span></h3>
                         </div>
                         <div className="p-6 space-y-4">
                             {filteredSupervisors.length > 0 && (
@@ -301,7 +301,7 @@ export default function UserEdit({ user, departments, employeeTypes, roles, leav
                                     ))}
                                 </div>
                             ) : (
-                                <p className="text-sm text-gray-500">No supervisors assigned. Only the department manager will be notified for leave requests.</p>
+                                <p className="text-sm text-gray-500">No leave approver assigned. Leave requests will be routed to the department manager by default.</p>
                             )}
                             {errors.supervisors && <p className="mt-1 text-sm text-red-600">{errors.supervisors}</p>}
                         </div>

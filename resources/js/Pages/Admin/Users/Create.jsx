@@ -3,7 +3,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Users } from 'lucide-react';
 
 export default function UserCreate({ departments, employeeTypes, roles, availableSupervisors = [] }) {
-    const { role_labels } = usePage().props;
+    const { role_labels, password_login_enabled } = usePage().props;
+    const passwordLoginEnabled = password_login_enabled !== false;
     const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const { data, setData, post, processing, errors } = useForm({
         name: '',
@@ -11,7 +12,6 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
         password: '',
         role: 'employee',
         is_active: true,
-        employee_number: '',
         nric: '',
         department_id: '',
         employee_type_id: '',
@@ -83,16 +83,24 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
                                     {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Password</label>
-                                    <input
-                                        type="password"
-                                        value={data.password}
-                                        onChange={(e) => setData('password', e.target.value)}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                    />
-                                    {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
-                                </div>
+                                {passwordLoginEnabled ? (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700">Password</label>
+                                        <input
+                                            type="password"
+                                            value={data.password}
+                                            onChange={(e) => setData('password', e.target.value)}
+                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        />
+                                        {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center">
+                                        <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 w-full">
+                                            Passwordless mode is enabled. The user will sign in via magic link sent to their email.
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Role</label>
@@ -140,19 +148,14 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
                                 </div>
                             </div>
 
-                            <h3 className="text-lg font-medium text-gray-900 border-b pb-3 pt-4">Employee Information</h3>
+                            <h3 className="text-lg font-medium text-gray-900 border-b pb-3 pt-4">User Information</h3>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700">Employee Number</label>
-                                    <input
-                                        type="text"
-                                        value={data.employee_number}
-                                        onChange={(e) => setData('employee_number', e.target.value)}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        placeholder="e.g., EMP005"
-                                    />
-                                    {errors.employee_number && <p className="mt-1 text-sm text-red-600">{errors.employee_number}</p>}
+                                    <label className="block text-sm font-medium text-gray-700">Employee ID</label>
+                                    <div className="mt-1 block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-400 italic">
+                                        Auto-assigned (AISG0001 format)
+                                    </div>
                                 </div>
 
                                 <div>
@@ -237,7 +240,7 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
                     <div className="bg-white shadow rounded-lg">
                         <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
                             <Users className="h-5 w-5 text-indigo-600" />
-                            <h3 className="text-lg font-medium text-gray-900">Supervisors</h3>
+                            <h3 className="text-lg font-medium text-gray-900">Supervisors <span className="text-sm font-normal text-gray-500">(Leave Approver)</span></h3>
                         </div>
                         <div className="p-6 space-y-4">
                             {filteredSupervisors.length > 0 && (
@@ -251,7 +254,7 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
                                         <option value="" disabled>Select a supervisor to add...</option>
                                         {filteredSupervisors.map((sup) => (
                                             <option key={sup.id} value={sup.id}>
-                                                {sup.name} — {sup.role.replace('_', ' ')} {sup.department ? `(${sup.department})` : ''}
+                                                {sup.name} — {getRoleLabel(sup.role)} {sup.department ? `(${sup.department})` : ''}
                                             </option>
                                         ))}
                                     </select>
@@ -271,7 +274,7 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
                                                         )}
                                                     </div>
                                                     <p className="text-xs text-gray-500">
-                                                        {sup.role.replace('_', ' ')} {sup.department ? `· ${sup.department}` : ''}
+                                                        {getRoleLabel(sup.role)} {sup.department ? `· ${sup.department}` : ''}
                                                     </p>
                                                 </div>
                                             </div>
@@ -297,7 +300,7 @@ export default function UserCreate({ departments, employeeTypes, roles, availabl
                                     ))}
                                 </div>
                             ) : (
-                                <p className="text-sm text-gray-500">No supervisors assigned. Only the department manager will be notified for leave requests.</p>
+                                <p className="text-sm text-gray-500">No leave approver assigned. Leave requests will be routed to the department manager by default.</p>
                             )}
                             {errors.supervisors && <p className="mt-1 text-sm text-red-600">{errors.supervisors}</p>}
                         </div>

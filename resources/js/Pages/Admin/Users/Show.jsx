@@ -1,9 +1,11 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Edit, User, Users } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 export default function UserShow({ user }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     return (
         <AuthenticatedLayout title={`User: ${user.name}`}>
             <Head title={user.name} />
@@ -33,7 +35,7 @@ export default function UserShow({ user }) {
                         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
                             <div>
                                 <dt className="text-sm font-medium text-gray-500">Role</dt>
-                                <dd className="mt-1 text-sm text-gray-900 capitalize">{user.role?.replace('_', ' ')}</dd>
+                                <dd className="mt-1 text-sm text-gray-900 capitalize">{getRoleLabel(user.role)}</dd>
                             </div>
                             <div>
                                 <dt className="text-sm font-medium text-gray-500">Status</dt>
@@ -59,7 +61,7 @@ export default function UserShow({ user }) {
                 {user.employee && (
                     <div className="bg-white shadow rounded-lg">
                         <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-                            <h3 className="text-lg font-medium text-gray-900">Employee Information</h3>
+                            <h3 className="text-lg font-medium text-gray-900">User Information</h3>
                         </div>
                         <div className="p-6">
                             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
@@ -87,6 +89,26 @@ export default function UserShow({ user }) {
                                     <dt className="text-sm font-medium text-gray-500">Phone</dt>
                                     <dd className="mt-1 text-sm text-gray-900">{user.employee.phone || 'Not specified'}</dd>
                                 </div>
+                                <div>
+                                    <dt className="text-sm font-medium text-gray-500">Date of Birth</dt>
+                                    <dd className="mt-1 text-sm text-gray-900">{user.employee.date_of_birth ? formatDate(user.employee.date_of_birth) : 'Not specified'}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-sm font-medium text-gray-500">Gender</dt>
+                                    <dd className="mt-1 text-sm text-gray-900 capitalize">{user.employee.gender || 'Not specified'}</dd>
+                                </div>
+                                <div className="sm:col-span-2">
+                                    <dt className="text-sm font-medium text-gray-500">Address</dt>
+                                    <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line">{user.employee.address || 'Not specified'}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-sm font-medium text-gray-500">Emergency Contact Name</dt>
+                                    <dd className="mt-1 text-sm text-gray-900">{user.employee.emergency_contact_name || 'Not specified'}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-sm font-medium text-gray-500">Emergency Contact Phone</dt>
+                                    <dd className="mt-1 text-sm text-gray-900">{user.employee.emergency_contact_phone || 'Not specified'}</dd>
+                                </div>
                             </dl>
                         </div>
                     </div>
@@ -97,7 +119,7 @@ export default function UserShow({ user }) {
                     <div className="bg-white shadow rounded-lg">
                         <div className="px-4 py-5 sm:px-6 border-b border-gray-200 flex items-center gap-2">
                             <Users className="h-5 w-5 text-indigo-600" />
-                            <h3 className="text-lg font-medium text-gray-900">Supervisors</h3>
+                            <h3 className="text-lg font-medium text-gray-900">Supervisors <span className="text-sm font-normal text-gray-500">(Leave Approver)</span></h3>
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
@@ -111,7 +133,7 @@ export default function UserShow({ user }) {
                                                 ) : null}
                                             </div>
                                             <p className="text-xs text-gray-500">
-                                                {sup.user?.role?.replace('_', ' ')} {sup.department?.name ? `· ${sup.department.name}` : ''}
+                                                {getRoleLabel(sup.user?.role)} {sup.department?.name ? `· ${sup.department.name}` : ''}
                                             </p>
                                         </div>
                                     </div>

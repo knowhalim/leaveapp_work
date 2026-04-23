@@ -1,4 +1,4 @@
-<p style="margin: 0 0 15px 0;">As an <strong>Administrator</strong>, you have system management capabilities:</p>
+<p style="margin: 0 0 15px 0;">As {{ preg_match('/^[aeiouAEIOU]/', $roleLabel ?? 'Administrator') ? 'an' : 'a' }} <strong>{{ $roleLabel ?? 'Administrator' }}</strong>, you have system management capabilities:</p>
 
 <ol style="margin: 0; padding-left: 20px;">
     <li style="margin-bottom: 10px;">

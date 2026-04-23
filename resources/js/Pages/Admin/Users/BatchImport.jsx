@@ -8,6 +8,8 @@ const MAX_FILE_SIZE_MB = 2;
 const ALLOWED_EXTENSIONS = ['.csv'];
 
 export default function BatchImport({ availableSupervisors = [], departments = [], employeeTypes = [], leaveTypes = [] }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const { auth, flash } = usePage().props;
     const isAdmin = auth.user.role === 'super_admin' || auth.user.role === 'admin';
 
@@ -178,50 +180,98 @@ export default function BatchImport({ availableSupervisors = [], departments = [
                         <Info className="h-5 w-5 text-indigo-600" />
                         <h3 className="text-lg font-medium text-gray-900">CSV Format Instructions</h3>
                     </div>
-                    <div className="p-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div className="p-6 space-y-5">
+                        {/* Required vs Optional columns */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
                             <div>
-                                <h4 className="font-medium text-gray-900 mb-2">Required Columns</h4>
-                                <ul className="space-y-1 text-gray-600">
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">name</code> — Full name</li>
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">email</code> — Unique email address</li>
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">employee_number</code> — Unique employee ID</li>
+                                <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-1">
+                                    Required Columns <span className="text-red-500">*</span>
+                                </h4>
+                                <ul className="space-y-2 text-gray-700">
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-red-50 border border-red-200 px-1.5 py-0.5 rounded text-xs text-red-700 shrink-0">name</code>
+                                        <span>Full name of the employee</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-red-50 border border-red-200 px-1.5 py-0.5 rounded text-xs text-red-700 shrink-0">email</code>
+                                        <span>Must be unique — not already registered in the system</span>
+                                    </li>
                                 </ul>
                             </div>
                             <div>
-                                <h4 className="font-medium text-gray-900 mb-2">Optional Columns</h4>
-                                <ul className="space-y-1 text-gray-600">
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">nric</code> — National ID</li>
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">department</code> — Must match existing name</li>
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">employee_type</code> — Must match existing name</li>
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">position</code> — Job title</li>
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">hire_date</code> — Format: YYYY-MM-DD</li>
-                                    <li><code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">phone</code> — Phone number</li>
+                                <h4 className="font-semibold text-gray-900 mb-2">Optional Columns</h4>
+                                <ul className="space-y-2 text-gray-700">
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs shrink-0">nric</code>
+                                        <span>National ID — must be unique if provided</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs shrink-0">employee_number</code>
+                                        <span>Auto-assigned as AISG0001, AISG0002, … if omitted. If provided, must be unique.</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs shrink-0">department</code>
+                                        <span>Must exactly match an available department name below</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs shrink-0">employee_type</code>
+                                        <span>Must exactly match an available employee type name below</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs shrink-0">position</code>
+                                        <span>Job title (free text)</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs shrink-0">hire_date</code>
+                                        <span>Accepted formats: <strong>YYYY-MM-DD</strong> or <strong>DD/MM/YYYY</strong></span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs shrink-0">phone</code>
+                                        <span>Phone number (free text)</span>
+                                    </li>
                                 </ul>
                             </div>
                         </div>
 
-                        {leaveTypes.length > 0 && (
-                            <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
-                                You can also include{' '}
-                                <a href="#leave-balance-ref" className="text-indigo-600 hover:underline font-medium">
-                                    leave balance columns
-                                </a>
-                                {' '}(optional) to set custom entitled days per employee.
-                            </div>
-                        )}
+                        {/* Valid departments */}
                         {departments.length > 0 && (
-                            <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
-                                <strong>Available departments:</strong> {departments.join(', ')}
+                            <div className="pt-4 border-t border-gray-100">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Valid Department Names</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {departments.map(d => (
+                                        <code key={d} className="bg-blue-50 border border-blue-200 px-2 py-0.5 rounded text-xs text-blue-700">{d}</code>
+                                    ))}
+                                </div>
                             </div>
                         )}
+
+                        {/* Valid employee types */}
                         {employeeTypes.length > 0 && (
-                            <div className="mt-1 text-sm text-gray-500">
-                                <strong>Available employee types:</strong> {employeeTypes.join(', ')}
+                            <div className="pt-3 border-t border-gray-100">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Valid Employee Type Names</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {employeeTypes.map(t => (
+                                        <code key={t} className="bg-purple-50 border border-purple-200 px-2 py-0.5 rounded text-xs text-purple-700">{t}</code>
+                                    ))}
+                                </div>
                             </div>
                         )}
-                        <p className="mt-3 text-sm text-gray-500">
-                            Passwords are auto-generated for each user. All imported users are assigned the <strong>employee</strong> role.
+
+                        {/* Leave balance columns */}
+                        {leaveTypes.length > 0 && (
+                            <div className="pt-3 border-t border-gray-100">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Optional: Leave Balance Columns</p>
+                                <p className="text-sm text-gray-600 mb-2">Add leave type codes as column headers to set custom entitlement days per employee. Leave blank to use the default entitlement for their employee type.</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {leaveTypes.map(lt => (
+                                        <code key={lt.code} className="bg-green-50 border border-green-200 px-2 py-0.5 rounded text-xs text-green-700">{lt.code}</code>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <p className="pt-3 border-t border-gray-100 text-sm text-gray-500">
+                            Passwords are auto-generated for each user. All imported users are assigned the <strong>{getRoleLabel('employee')}</strong> role.
                             Rows with errors are skipped — valid rows in the same file are still imported.
                         </p>
                     </div>
@@ -270,7 +320,7 @@ export default function BatchImport({ availableSupervisors = [], departments = [
                                                 .filter(s => !data.supervisors.some(ds => ds.id === s.id))
                                                 .map((sup) => (
                                                     <option key={sup.id} value={sup.id}>
-                                                        {sup.name} — {sup.role.replace('_', ' ')} {sup.department ? `(${sup.department})` : ''}
+                                                        {sup.name} — {getRoleLabel(sup.role)} {sup.department ? `(${sup.department})` : ''}
                                                     </option>
                                                 ))}
                                         </select>
@@ -289,7 +339,7 @@ export default function BatchImport({ availableSupervisors = [], departments = [
                                                             )}
                                                         </div>
                                                         <p className="text-xs text-gray-500">
-                                                            {sup.role.replace('_', ' ')} {sup.department ? `· ${sup.department}` : ''}
+                                                            {getRoleLabel(sup.role)} {sup.department ? `· ${sup.department}` : ''}
                                                         </p>
                                                     </div>
                                                     <div className="flex items-center gap-3">

@@ -2,18 +2,30 @@ import { useState } from 'react';
 import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { formatDate, formatDateTime, getStatusColor } from '@/lib/utils';
-import { Check, X, MessageSquare, RefreshCw, AlertTriangle, Users, Calendar, Wallet } from 'lucide-react';
+import { Check, X, MessageSquare, RefreshCw, AlertTriangle, Users, Calendar, Wallet, Paperclip, Download } from 'lucide-react';
 
 export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, leaveTypeBalance, otherPendingLeave, upcomingLeave, teamOnLeave }) {
-    const { auth } = usePage().props;
+    const { auth, role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const user = auth?.user;
     const isManager = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'manager';
+    const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
     const isOwner = leaveRequest.employee?.user_id === user?.id;
-    const canCancel = (isOwner || isManager) && (leaveRequest.status === 'pending' || leaveRequest.status === 'approved');
+    // Cancellation is reserved for the requester (or admin override). Managers
+    // revoke an approved leave via Reject, not Cancel.
+    const canCancel = (isOwner || isAdmin) && (leaveRequest.status === 'pending' || leaveRequest.status === 'approved');
+    const showManagerCancelNote = isManager && !isAdmin && !isOwner
+        && (leaveRequest.status === 'pending' || leaveRequest.status === 'approved');
 
     const [showApproveModal, setShowApproveModal] = useState(false);
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [showConvertModal, setShowConvertModal] = useState(false);
+    const [showAttachmentModal, setShowAttachmentModal] = useState(false);
+
+    const attachmentUrl = leaveRequest.attachment_path ? `/leaves/${leaveRequest.id}/attachment` : null;
+    const attachmentExt = (leaveRequest.attachment_path || '').split('.').pop().toLowerCase();
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(attachmentExt);
+    const isPdf = attachmentExt === 'pdf';
 
     const approveForm = useForm({ notes: '' });
     const rejectForm = useForm({ notes: '' });
@@ -70,7 +82,7 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, lea
                     <div className="p-6">
                         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6">
                             <div>
-                                <dt className="text-sm font-medium text-gray-500">Employee</dt>
+                                <dt className="text-sm font-medium text-gray-500">{getRoleLabel('employee')}</dt>
                                 <dd className="mt-1 text-sm text-gray-900">{leaveRequest.employee?.user?.name}</dd>
                             </div>
                             <div>
@@ -111,6 +123,21 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, lea
                                     <dd className="mt-1 text-sm text-gray-900">{leaveRequest.reason}</dd>
                                 </div>
                             )}
+                            {leaveRequest.attachment_path && (
+                                <div className="sm:col-span-2">
+                                    <dt className="text-sm font-medium text-gray-500">Attachment</dt>
+                                    <dd className="mt-1 text-sm">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAttachmentModal(true)}
+                                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded border border-gray-300 text-indigo-700 hover:bg-indigo-50"
+                                        >
+                                            <Paperclip className="h-4 w-4" />
+                                            View attachment
+                                        </button>
+                                    </dd>
+                                </div>
+                            )}
                             {leaveRequest.status !== 'pending' && (
                                 <>
                                     <div>
@@ -133,7 +160,7 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, lea
                     </div>
 
                     {/* Actions */}
-                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-wrap gap-3">
+                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-wrap gap-3 items-center">
                         {isManager && leaveRequest.status === 'pending' && (
                             <>
                                 <button
@@ -152,6 +179,16 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, lea
                                 </button>
                             </>
                         )}
+                        {isManager && leaveRequest.status === 'approved' && (
+                            <button
+                                onClick={() => setShowRejectModal(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50"
+                                title="Revoke this approval"
+                            >
+                                <X className="h-4 w-4" />
+                                Reject
+                            </button>
+                        )}
                         {leaveRequest.status === 'approved' && (isOwner || isManager) && leaveTypes?.length > 0 && (
                             <button
                                 onClick={() => setShowConvertModal(true)}
@@ -169,6 +206,11 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, lea
                                 Cancel Request
                             </button>
                         )}
+                        {showManagerCancelNote && (
+                            <p className="text-xs text-gray-500 ml-auto max-w-sm">
+                                Only the requester can cancel their own leave. To revoke an approval, use <span className="font-medium text-red-700">Reject</span>.
+                            </p>
+                        )}
                     </div>
                 </div>
 
@@ -184,43 +226,43 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, lea
                                         {leaveRequest.employee?.user?.name}'s {leaveRequest.leave_type?.name} Balance
                                     </h3>
                                 </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                                    {[
-                                        { label: 'Entitled', value: leaveTypeBalance.entitled_days },
-                                        { label: 'Carried Over', value: leaveTypeBalance.carried_over },
-                                        { label: 'Adjustment', value: leaveTypeBalance.adjustment, signed: true },
-                                        { label: 'Used', value: leaveTypeBalance.used_days, negative: true },
-                                        { label: 'Available', value: leaveTypeBalance.entitled_days + leaveTypeBalance.carried_over + leaveTypeBalance.adjustment - leaveTypeBalance.used_days - leaveTypeBalance.pending_days, highlight: true },
-                                    ].map(({ label, value, signed, negative, highlight }) => {
-                                        const available = leaveTypeBalance.entitled_days + leaveTypeBalance.carried_over + leaveTypeBalance.adjustment - leaveTypeBalance.used_days - leaveTypeBalance.pending_days;
-                                        const isLow = highlight && available <= leaveRequest.total_days;
-                                        return (
-                                            <div key={label} className={`rounded-lg p-3 text-center ${highlight ? (isLow ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200') : 'bg-gray-50'}`}>
-                                                <p className="text-xs text-gray-500 mb-1">{label}</p>
-                                                <p className={`text-lg font-bold ${highlight ? (isLow ? 'text-red-600' : 'text-green-600') : negative ? 'text-gray-700' : 'text-gray-900'}`}>
-                                                    {signed && value > 0 ? '+' : ''}{value}
-                                                </p>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
                                 {(() => {
-                                    const available = leaveTypeBalance.entitled_days + leaveTypeBalance.carried_over + leaveTypeBalance.adjustment - leaveTypeBalance.used_days - leaveTypeBalance.pending_days;
-                                    if (available < leaveRequest.total_days) {
-                                        return (
-                                            <div className="mt-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
-                                                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                                                Insufficient balance — employee has {available} day{available !== 1 ? 's' : ''} available but is requesting {leaveRequest.total_days} day{leaveRequest.total_days !== 1 ? 's' : ''}.
+                                    // Exclude this request's own pending days so the approver sees the true effective balance
+                                    const thisPending = leaveRequest.status === 'pending' ? leaveRequest.total_days : 0;
+                                    const otherPending = Math.max(0, leaveTypeBalance.pending_days - thisPending);
+                                    const available = leaveTypeBalance.entitled_days + leaveTypeBalance.carried_over + leaveTypeBalance.adjustment - leaveTypeBalance.used_days - otherPending;
+                                    const isLow = available < leaveRequest.total_days;
+                                    return (
+                                        <>
+                                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                                {[
+                                                    { label: 'Entitled', value: leaveTypeBalance.entitled_days },
+                                                    { label: 'Carried Over', value: leaveTypeBalance.carried_over },
+                                                    { label: 'Adjustment', value: leaveTypeBalance.adjustment, signed: true },
+                                                    { label: 'Used', value: leaveTypeBalance.used_days, negative: true },
+                                                    { label: 'Available', value: available, highlight: true },
+                                                ].map(({ label, value, signed, negative, highlight }) => (
+                                                    <div key={label} className={`rounded-lg p-3 text-center ${highlight ? (isLow ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200') : 'bg-gray-50'}`}>
+                                                        <p className="text-xs text-gray-500 mb-1">{label}</p>
+                                                        <p className={`text-lg font-bold ${highlight ? (isLow ? 'text-red-600' : 'text-green-600') : negative ? 'text-gray-700' : 'text-gray-900'}`}>
+                                                            {signed && value > 0 ? '+' : ''}{value}
+                                                        </p>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        );
-                                    }
-                                    if (leaveTypeBalance.pending_days > 0) {
-                                        return (
-                                            <p className="mt-2 text-xs text-amber-600">
-                                                Note: {leaveTypeBalance.pending_days} day{leaveTypeBalance.pending_days !== 1 ? 's' : ''} are held by other pending requests.
-                                            </p>
-                                        );
-                                    }
+                                            {isLow && (
+                                                <div className="mt-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-md px-3 py-2">
+                                                    <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                                                    Insufficient balance — employee has {available} day{available !== 1 ? 's' : ''} available but is requesting {leaveRequest.total_days} day{leaveRequest.total_days !== 1 ? 's' : ''}.
+                                                </div>
+                                            )}
+                                            {otherPending > 0 && (
+                                                <p className="mt-2 text-xs text-amber-600">
+                                                    Note: {otherPending} day{otherPending !== 1 ? 's' : ''} are held by other pending requests.
+                                                </p>
+                                            )}
+                                        </>
+                                    );
                                 })()}
                             </div>
                         )}
@@ -520,13 +562,73 @@ export default function LeaveShow({ leaveRequest, leaveTypes, leaveBalances, lea
                 </div>
             )}
 
+            {/* Attachment Modal */}
+            {showAttachmentModal && attachmentUrl && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen px-4 py-6">
+                        <div className="fixed inset-0 bg-gray-900/75" onClick={() => setShowAttachmentModal(false)} />
+                        <div className="relative bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                            <div className="flex items-center justify-between px-5 py-3 border-b">
+                                <div className="flex items-center gap-2">
+                                    <Paperclip className="h-4 w-4 text-gray-500" />
+                                    <h3 className="text-base font-semibold text-gray-900">Attachment</h3>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <a
+                                        href={attachmentUrl}
+                                        download
+                                        className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800"
+                                    >
+                                        <Download className="h-4 w-4" />
+                                        Download
+                                    </a>
+                                    <button
+                                        onClick={() => setShowAttachmentModal(false)}
+                                        className="text-gray-400 hover:text-gray-600"
+                                    >
+                                        <X className="h-5 w-5" />
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-auto bg-gray-50 p-4 flex items-center justify-center">
+                                {isImage ? (
+                                    <img src={attachmentUrl} alt="Attachment" className="max-w-full max-h-[75vh] object-contain" />
+                                ) : isPdf ? (
+                                    <iframe src={attachmentUrl} title="Attachment" className="w-full h-[75vh] bg-white" />
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <Paperclip className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+                                        <p className="text-sm text-gray-600 mb-4">Preview not available for this file type.</p>
+                                        <a
+                                            href={attachmentUrl}
+                                            download
+                                            className="inline-flex items-center gap-2 px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                                        >
+                                            <Download className="h-4 w-4" />
+                                            Download file
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Reject Modal */}
             {showRejectModal && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
                     <div className="flex items-center justify-center min-h-screen px-4">
                         <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setShowRejectModal(false)} />
                         <div className="relative bg-white rounded-lg max-w-md w-full p-6">
-                            <h3 className="text-lg font-medium text-gray-900 mb-4">Reject Leave Request</h3>
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">
+                                {leaveRequest.status === 'approved' ? 'Revoke Approved Leave' : 'Reject Leave Request'}
+                            </h3>
+                            {leaveRequest.status === 'approved' && (
+                                <p className="text-xs text-gray-500 mb-3">
+                                    This leave is already approved. Rejecting it will return the days to the employee's balance and notify them with your reason.
+                                </p>
+                            )}
                             <form onSubmit={handleReject}>
                                 <textarea
                                     value={rejectForm.data.notes}

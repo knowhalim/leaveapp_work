@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, usePage, router } from '@inertiajs/react';
+import { toast } from 'sonner';
 import {
     Home,
     Users,
@@ -17,13 +18,22 @@ import {
     Mail,
     FileUp,
     User,
+    Archive,
+    ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function AuthenticatedLayout({ children, title }) {
-    const { auth, company_name, role_labels } = usePage().props;
+    const { auth, company_name, role_labels, flash } = usePage().props;
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+    useEffect(() => {
+        if (flash?.success) toast.success(flash.success);
+        if (flash?.error) toast.error(flash.error);
+        if (flash?.message) toast(flash.message);
+        if (flash?.warning) toast.warning(flash.warning);
+    }, [flash?.success, flash?.error, flash?.message, flash?.warning]);
 
     const user = auth?.user;
     const isAdmin = user?.role === 'super_admin' || user?.role === 'admin';
@@ -37,12 +47,14 @@ export default function AuthenticatedLayout({ children, title }) {
         { name: 'My Leave', href: '/leaves', icon: Calendar, show: true },
         { name: 'My Balances', href: '/my-balances', icon: FileText, show: true },
         { name: 'Pending Approvals', href: '/leaves/pending', icon: Bell, show: isManager },
+        { name: 'Leave Requests', href: '/leaves/team', icon: ClipboardList, show: isManager },
         { name: 'My Team', href: '/manager/team', icon: Users, show: isManager },
         { name: 'Users', href: '/users', icon: Users, show: isAdmin },
         { name: 'Batch Import', href: '/users/batch-import', icon: FileUp, show: isManager },
         { name: 'Departments', href: '/departments', icon: Building2, show: isAdmin },
         { name: 'Leave Types', href: '/leave-types', icon: Calendar, show: isAdmin },
         { name: 'Bulk Leave Adjustment', href: '/leave-balances/bulk-adjustment', icon: ListPlus, show: isAdmin },
+        { name: 'Bulk Adjust Backups', href: '/bulk-adjust-backups', icon: Archive, show: isAdmin },
         { name: 'Mass Email', href: '/mass-email', icon: Mail, show: isAdmin },
         { name: 'Reports', href: '/reports', icon: FileText, show: isAdmin },
         { name: 'Settings', href: '/settings', icon: Settings, show: isAdmin },

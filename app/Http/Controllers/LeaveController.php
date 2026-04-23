@@ -27,22 +27,14 @@ class LeaveController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $query = LeaveRequest::with(['employee.user', 'leaveType', 'approver']);
+        $query = LeaveRequest::with(['employee.user', 'employee.supervisors.user', 'leaveType', 'approver']);
 
-        if (!$user->isAdmin()) {
-            if ($user->isManager()) {
-                $managedDepartmentIds = $user->managedDepartments()->pluck('id');
-                $subordinateIds = $user->employee
-                    ? $user->employee->subordinates()->pluck('employees.id')
-                    : collect();
-                $teamEmployeeIds = Employee::where(function ($q) use ($managedDepartmentIds, $subordinateIds) {
-                    $q->whereIn('department_id', $managedDepartmentIds)
-                        ->orWhereIn('id', $subordinateIds);
-                })->pluck('id');
-                $query->whereIn('employee_id', $teamEmployeeIds);
-            } else {
-                $query->where('employee_id', $user->employee?->id);
-            }
+        if ($user->isAdmin()) {
+            // Admin/super_admin see all leaves on this page
+        } else {
+            // Everyone else (manager, employee) sees only their own leave here.
+            // Managers view their team's leaves via the Team Leaves page.
+            $query->where('employee_id', $user->employee?->id);
         }
 
         if ($request->has('status') && $request->status !== 'all') {
@@ -145,8 +137,15 @@ class LeaveController extends Controller
             'start_half' => ['required', 'in:full,first_half,second_half'],
             'end_half' => ['required', 'in:full,first_half,second_half'],
             'reason' => ['nullable', 'string', 'max:1000'],
-            'attachment' => ['nullable', 'file', 'max:5120'],
+            'attachment' => [
+                'nullable',
+                \Illuminate\Validation\Rule::requiredIf(fn () => (bool) $leaveType->requires_attachment),
+                'file',
+                'max:5120',
+            ],
             'employee_id' => ['nullable', 'exists:employees,id'],
+        ], [
+            'attachment.required' => 'An attachment is required for this leave type.',
         ]);
 
         // Admin/manager can apply on behalf; otherwise use own employee record
@@ -178,12 +177,16 @@ class LeaveController extends Controller
             $validated['end_half']
         );
 
+        if ($totalDays <= 0) {
+            return back()->withErrors(['start_date' => 'The selected date(s) fall on a non-working day (weekend or public holiday). Please choose a working day.']);
+        }
+
         $balance = EmployeeLeaveBalance::where('employee_id', $employee->id)
             ->where('leave_type_id', $leaveType->id)
             ->where('financial_year', $financialYear)
             ->first();
 
-        if ($balance && $totalDays > $balance->available_balance) {
+        if ($balance && $totalDays > $balance->available_balance && !$leaveType->show_at_zero_balance) {
             return back()->withErrors(['leave_type_id' => 'Insufficient leave balance.']);
         }
 
@@ -227,7 +230,24 @@ class LeaveController extends Controller
 
     public function show(LeaveRequest $leave)
     {
-        $leave->load(['employee.user', 'leaveType', 'approver', 'comments.user']);
+        $leave->load(['employee.user', 'employee.department', 'employee.supervisors', 'leaveType', 'approver', 'comments.user']);
+
+        // Internal comments are only visible to admins/super_admins and to
+        // supervisors assigned to this employee (direct supervisor or dept manager).
+        $user = auth()->user();
+        $viewerEmployeeId = $user->employee?->id;
+        $isAssignedSupervisor = $viewerEmployeeId && (
+            $leave->employee->supervisors->contains(fn ($s) => $s->id === $viewerEmployeeId)
+            || ($leave->employee->department && $leave->employee->department->manager_id === $viewerEmployeeId)
+        );
+        $canSeeInternal = $user->isAdmin() || $isAssignedSupervisor;
+
+        if (!$canSeeInternal) {
+            $leave->setRelation(
+                'comments',
+                $leave->comments->reject(fn ($c) => (bool) $c->is_internal)->values()
+            );
+        }
 
         $leaveTypes = \App\Models\LeaveType::where('is_active', true)
             ->where('id', '!=', $leave->leave_type_id)
@@ -327,15 +347,17 @@ class LeaveController extends Controller
 
     public function reject(Request $request, LeaveRequest $leave)
     {
-        if (!$leave->isPending()) {
-            return back()->with('error', 'This leave request has already been processed.');
+        if (!$leave->isPending() && !$leave->isApproved()) {
+            return back()->with('error', 'This leave request cannot be rejected.');
         }
 
         $validated = $request->validate([
             'notes' => ['required', 'string', 'max:500'],
         ]);
 
-        DB::transaction(function () use ($leave, $validated) {
+        $wasApproved = $leave->isApproved();
+
+        DB::transaction(function () use ($leave, $validated, $wasApproved) {
             $leave->update([
                 'status' => 'rejected',
                 'approved_by' => auth()->id(),
@@ -349,10 +371,15 @@ class LeaveController extends Controller
                 ->first();
 
             if ($balance) {
-                $balance->decrement('pending_days', $leave->total_days);
+                if ($wasApproved) {
+                    // Already counted against used_days when approved — return those days.
+                    $balance->decrement('used_days', $leave->total_days);
+                } else {
+                    $balance->decrement('pending_days', $leave->total_days);
+                }
             }
 
-            ActivityLog::log('leave.rejected', $leave);
+            ActivityLog::log('leave.rejected', $leave, ['was_approved' => $wasApproved]);
 
             $this->webhookService->trigger('leave.rejected', $leave);
         });
@@ -420,11 +447,21 @@ class LeaveController extends Controller
             return back()->with('error', 'Please select a different leave type to convert to.');
         }
 
-        $newLeaveType = LeaveType::findOrFail($request->validate([
+        $newLeaveType = LeaveType::findOrFail($request->input('leave_type_id'));
+        $request->validate([
             'leave_type_id' => ['required', 'exists:leave_types,id'],
             'reason' => ['nullable', 'string', 'max:1000'],
-            'attachment' => ['nullable', 'file', 'max:5120'],
-        ])['leave_type_id']);
+            'attachment' => [
+                'nullable',
+                \Illuminate\Validation\Rule::requiredIf(
+                    fn () => (bool) $newLeaveType->requires_attachment && empty($leave->attachment_path)
+                ),
+                'file',
+                'max:5120',
+            ],
+        ], [
+            'attachment.required' => 'An attachment is required for this leave type.',
+        ]);
 
         $financialYear = $leave->financial_year;
 
@@ -479,10 +516,19 @@ class LeaveController extends Controller
             'is_internal' => ['boolean'],
         ]);
 
+        $user = auth()->user();
+        $viewerEmployeeId = $user->employee?->id;
+        $leave->loadMissing(['employee.supervisors', 'employee.department']);
+        $isAssignedSupervisor = $viewerEmployeeId && (
+            $leave->employee->supervisors->contains(fn ($s) => $s->id === $viewerEmployeeId)
+            || ($leave->employee->department && $leave->employee->department->manager_id === $viewerEmployeeId)
+        );
+        $canMarkInternal = $user->isAdmin() || $isAssignedSupervisor;
+
         $leave->comments()->create([
             'user_id' => auth()->id(),
             'comment' => $validated['comment'],
-            'is_internal' => $validated['is_internal'] ?? false,
+            'is_internal' => $canMarkInternal ? (bool) ($validated['is_internal'] ?? false) : false,
         ]);
 
         return back()->with('success', 'Comment added.');
@@ -491,7 +537,7 @@ class LeaveController extends Controller
     public function pending(Request $request)
     {
         $user = $request->user();
-        $query = LeaveRequest::with(['employee.user', 'leaveType'])->pending();
+        $query = LeaveRequest::with(['employee.user', 'employee.supervisors.user', 'leaveType'])->pending();
 
         if ($user->isManager() && !$user->isAdmin()) {
             $managedDepartmentIds = $user->managedDepartments()->pluck('id');
@@ -509,6 +555,58 @@ class LeaveController extends Controller
 
         return Inertia::render('Leave/Pending', [
             'pendingRequests' => $pendingRequests,
+        ]);
+    }
+
+    public function teamLeaves(Request $request)
+    {
+        $user = $request->user();
+        $query = LeaveRequest::with(['employee.user', 'leaveType', 'approver']);
+
+        if ($user->isAdmin()) {
+            // Admin/super_admin see every team request regardless of status.
+        } elseif ($user->isManager()) {
+            $managedDepartmentIds = $user->managedDepartments()->pluck('id');
+            $subordinateIds = $user->employee
+                ? $user->employee->subordinates()->pluck('employees.id')
+                : collect();
+            $teamEmployeeIds = Employee::where(function ($q) use ($managedDepartmentIds, $subordinateIds) {
+                $q->whereIn('department_id', $managedDepartmentIds)
+                    ->orWhereIn('id', $subordinateIds);
+            })->pluck('id');
+
+            // Exclude the manager's own requests — those live under "My Leave".
+            if ($user->employee) {
+                $teamEmployeeIds = $teamEmployeeIds->reject(fn ($id) => $id === $user->employee->id)->values();
+            }
+
+            $query->whereIn('employee_id', $teamEmployeeIds);
+        } else {
+            abort(403);
+        }
+
+        if ($request->filled('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->filled('leave_type') && $request->leave_type !== 'all') {
+            $query->where('leave_type_id', $request->leave_type);
+        }
+
+        if ($request->filled('date_from')) {
+            $query->where('start_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->where('end_date', '<=', $request->date_to);
+        }
+
+        $leaveRequests = $query->latest()->paginate(15)->withQueryString();
+
+        return Inertia::render('Leave/TeamIndex', [
+            'leaveRequests' => $leaveRequests,
+            'leaveTypes' => LeaveType::active()->get(),
+            'filters' => $request->only(['status', 'leave_type', 'date_from', 'date_to']),
         ]);
     }
 

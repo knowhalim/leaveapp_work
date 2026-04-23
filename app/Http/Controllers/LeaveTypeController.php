@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\EmployeeType;
 use App\Models\LeaveType;
 use App\Models\LeaveTypeAllowance;
+use App\Services\LeaveBalanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -40,6 +41,9 @@ class LeaveTypeController extends Controller
             'max_days' => ['nullable', 'integer', 'min:0'],
             'is_paid' => ['boolean'],
             'requires_attachment' => ['boolean'],
+            'allow_attachment' => ['boolean'],
+            'show_at_zero_balance' => ['boolean'],
+            'hide_balance' => ['boolean'],
             'allows_half_day' => ['boolean'],
             'max_backdate_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'is_active' => ['boolean'],
@@ -48,7 +52,10 @@ class LeaveTypeController extends Controller
             'allowances.*.days_allowed' => ['required', 'numeric', 'min:0'],
         ]);
 
-        DB::transaction(function () use ($validated) {
+        $requiresAttachment = $validated['requires_attachment'] ?? false;
+        $allowAttachment = ($validated['allow_attachment'] ?? false) || $requiresAttachment;
+
+        DB::transaction(function () use ($validated, $requiresAttachment, $allowAttachment) {
             $leaveType = LeaveType::create([
                 'name' => $validated['name'],
                 'code' => strtoupper($validated['code']),
@@ -56,7 +63,10 @@ class LeaveTypeController extends Controller
                 'default_days' => $validated['default_days'],
                 'max_days' => $validated['max_days'],
                 'is_paid' => $validated['is_paid'] ?? true,
-                'requires_attachment' => $validated['requires_attachment'] ?? false,
+                'requires_attachment' => $requiresAttachment,
+                'allow_attachment' => $allowAttachment,
+                'show_at_zero_balance' => $validated['show_at_zero_balance'] ?? false,
+                'hide_balance' => $validated['hide_balance'] ?? false,
                 'allows_half_day' => $validated['allows_half_day'] ?? true,
                 'max_backdate_days' => $validated['max_backdate_days'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,
@@ -71,6 +81,9 @@ class LeaveTypeController extends Controller
                     ]);
                 }
             }
+
+            // Create balance records for all existing active employees
+            app(LeaveBalanceService::class)->initializeBalancesForLeaveType($leaveType);
 
             ActivityLog::log('leave_type.created', $leaveType);
         });
@@ -108,6 +121,9 @@ class LeaveTypeController extends Controller
             'max_days' => ['nullable', 'integer', 'min:0'],
             'is_paid' => ['boolean'],
             'requires_attachment' => ['boolean'],
+            'allow_attachment' => ['boolean'],
+            'show_at_zero_balance' => ['boolean'],
+            'hide_balance' => ['boolean'],
             'allows_half_day' => ['boolean'],
             'max_backdate_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'is_active' => ['boolean'],
@@ -116,7 +132,10 @@ class LeaveTypeController extends Controller
             'allowances.*.days_allowed' => ['required', 'numeric', 'min:0'],
         ]);
 
-        DB::transaction(function () use ($validated, $leaveType) {
+        $requiresAttachment = $validated['requires_attachment'] ?? false;
+        $allowAttachment = ($validated['allow_attachment'] ?? false) || $requiresAttachment;
+
+        DB::transaction(function () use ($validated, $leaveType, $requiresAttachment, $allowAttachment) {
             $leaveType->update([
                 'name' => $validated['name'],
                 'code' => strtoupper($validated['code']),
@@ -124,7 +143,10 @@ class LeaveTypeController extends Controller
                 'default_days' => $validated['default_days'],
                 'max_days' => $validated['max_days'],
                 'is_paid' => $validated['is_paid'] ?? true,
-                'requires_attachment' => $validated['requires_attachment'] ?? false,
+                'requires_attachment' => $requiresAttachment,
+                'allow_attachment' => $allowAttachment,
+                'show_at_zero_balance' => $validated['show_at_zero_balance'] ?? false,
+                'hide_balance' => $validated['hide_balance'] ?? false,
                 'allows_half_day' => $validated['allows_half_day'] ?? true,
                 'max_backdate_days' => $validated['max_backdate_days'] ?? null,
                 'is_active' => $validated['is_active'] ?? true,

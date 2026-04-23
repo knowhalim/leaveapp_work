@@ -1,6 +1,6 @@
 import { Head, useForm, usePage, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Settings, Calendar, Building2, Mail, Clock, Database, Save, Download, Play, RefreshCw, ExternalLink, CheckCircle, AlertCircle, Eye, EyeOff, PlayCircle, Copy, Check, Terminal, Trash2, Upload } from 'lucide-react';
+import { Settings, Calendar, Building2, Mail, MailOpen, Clock, Database, Save, Download, Play, RefreshCw, ExternalLink, CheckCircle, AlertCircle, Eye, EyeOff, PlayCircle, Copy, Check, Terminal, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
 
 export default function ScheduledTasks({ settings, backups = [] }) {
@@ -8,6 +8,7 @@ export default function ScheduledTasks({ settings, backups = [] }) {
     const [runningBackup, setRunningBackup] = useState(false);
     const [showClientSecret, setShowClientSecret] = useState(false);
     const [copiedCron, setCopiedCron] = useState(false);
+    const [copiedCallback, setCopiedCallback] = useState(false);
     const [restoreTab, setRestoreTab] = useState('local');
     const [driveBackups, setDriveBackups] = useState(null);
     const [driveLoading, setDriveLoading] = useState(false);
@@ -48,6 +49,12 @@ export default function ScheduledTasks({ settings, backups = [] }) {
         navigator.clipboard.writeText(cronCommand);
         setCopiedCron(true);
         setTimeout(() => setCopiedCron(false), 2000);
+    };
+
+    const handleCopyCallback = () => {
+        navigator.clipboard.writeText(settings.google_callback_url || '');
+        setCopiedCallback(true);
+        setTimeout(() => setCopiedCallback(false), 2000);
     };
 
     const { data, setData, post, processing, errors } = useForm({
@@ -130,6 +137,13 @@ export default function ScheduledTasks({ settings, backups = [] }) {
                     >
                         <Building2 className="h-4 w-4" />
                         Employee Types
+                    </a>
+                    <a
+                        href="/settings/email-templates"
+                        className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2"
+                    >
+                        <MailOpen className="h-4 w-4" />
+                        Email Templates
                     </a>
                     <a
                         href="/settings/email"
@@ -359,6 +373,42 @@ export default function ScheduledTasks({ settings, backups = [] }) {
                                                 <AlertCircle className="h-4 w-4 text-indigo-500 flex-shrink-0 mt-0.5" />
                                                 <p className="text-xs text-indigo-700">
                                                     Enter your Google OAuth credentials below, save settings, then click "Connect Google Drive" to authorize.
+                                                </p>
+                                            </div>
+
+                                            {/* Authorized Redirect URI (callback URL) */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700">
+                                                    Authorized Redirect URI
+                                                </label>
+                                                <div className="mt-1 flex rounded-md shadow-sm">
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        value={settings.google_callback_url || ''}
+                                                        onFocus={(e) => e.target.select()}
+                                                        className="block w-full rounded-l-md border-gray-300 bg-gray-50 text-gray-700 sm:text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCopyCallback}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-2 border border-l-0 border-gray-300 rounded-r-md bg-white text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                                    >
+                                                        {copiedCallback ? (
+                                                            <>
+                                                                <Check className="h-3.5 w-3.5 text-green-600" />
+                                                                Copied
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Copy className="h-3.5 w-3.5" />
+                                                                Copy
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                                <p className="mt-1 text-xs text-gray-500">
+                                                    Paste this into your Google Cloud Console OAuth client under "Authorized redirect URIs".
                                                 </p>
                                             </div>
 

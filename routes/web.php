@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\MagicLinkController;
+use App\Http\Controllers\BulkAdjustmentBackupController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\GoogleDriveController;
@@ -80,6 +81,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('/create', [LeaveController::class, 'create'])->name('create');
         Route::post('/', [LeaveController::class, 'store'])->name('store');
         Route::get('/pending', [LeaveController::class, 'pending'])->name('pending')->middleware('role:super_admin,admin,manager');
+        Route::get('/team', [LeaveController::class, 'teamLeaves'])->name('team')->middleware('role:super_admin,admin,manager');
         Route::get('/{leave}', [LeaveController::class, 'show'])->name('show');
         Route::get('/{leave}/attachment', [LeaveController::class, 'viewAttachment'])->name('attachment');
         Route::post('/{leave}/approve', [LeaveController::class, 'approve'])->name('approve')->middleware('role:super_admin,admin,manager');
@@ -94,6 +96,24 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     // Employee balances API for on-behalf leave apply
     Route::get('/api/employee-balances/{employee}', function (\App\Models\Employee $employee) {
+        $user = auth()->user();
+
+        // Admins and super_admins can access any employee's balances
+        // Managers can only access balances for their subordinates
+        if ($user->isManager() && !$user->isAdmin()) {
+            $managerEmployee = $user->employee;
+            if (!$managerEmployee) {
+                abort(403, 'Access denied.');
+            }
+            $deptIds = \App\Models\Employee::whereHas('department', fn ($q) => $q->where('manager_id', $managerEmployee->id))->pluck('id');
+            $subIds  = \DB::table('employee_supervisors')->where('supervisor_id', $managerEmployee->id)->pluck('employee_id');
+            $allowed = $deptIds->merge($subIds)->unique();
+
+            if (!$allowed->contains($employee->id)) {
+                abort(403, 'Access denied.');
+            }
+        }
+
         $year = \App\Models\SystemSetting::getFinancialYear();
         return $employee->leaveBalances()->where('financial_year', $year)->with('leaveType')->get();
     })->middleware('role:super_admin,admin,manager');
@@ -152,6 +172,17 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::put('/employee-types/{employeeType}', [SettingsController::class, 'updateEmployeeType'])->name('employee-types.update');
             Route::delete('/employee-types/{employeeType}', [SettingsController::class, 'destroyEmployeeType'])->name('employee-types.destroy');
 
+            // Email Templates (Getting Started onboarding content)
+            Route::get('/email-templates', [SettingsController::class, 'emailTemplates'])->name('email-templates');
+            Route::post('/email-templates', [SettingsController::class, 'updateEmailTemplates'])->name('email-templates.update');
+        });
+
+        // Pre-bulk-adjustment backups — admin can view/download, super_admin can restore/delete
+        Route::prefix('bulk-adjust-backups')->name('bulk-adjust-backups.')->group(function () {
+            Route::get('/', [BulkAdjustmentBackupController::class, 'index'])->name('index');
+            Route::get('/{backup}/download', [BulkAdjustmentBackupController::class, 'download'])->name('download');
+            Route::post('/{backup}/restore', [BulkAdjustmentBackupController::class, 'restore'])->name('restore')->middleware('role:super_admin');
+            Route::delete('/{backup}', [BulkAdjustmentBackupController::class, 'destroy'])->name('destroy')->middleware('role:super_admin');
         });
 
         // Email Settings, DB Export, API Tokens, Scheduled Tasks (Super Admin only)

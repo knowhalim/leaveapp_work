@@ -1,3 +1,3 @@
 name,email,employee_number,nric,department,employee_type,position,hire_date,phone
-John Doe,john@example.com,EMP010,S1234567A,Engineering,Full-Time,Software Engineer,2025-01-15,91234567
-Jane Smith,jane@example.com,EMP011,,Marketing,Part-Time,Designer,2025-02-01,
+John Doe,john@example.com,EMP010,S1234567A,Innovation,Full-Time,Software Engineer,2025-01-15,91234567
+Jane Smith,jane@example.com,EMP011,,Innovation,Part-Time,Designer,2025-02-01,

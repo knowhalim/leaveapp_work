@@ -46,3 +46,7 @@ try {
 Schedule::command('app:backup-database')
     ->dailyAt($backupTime)
     ->when(fn () => (bool) SystemSetting::get('cron_backup_enabled', false));
+
+// Prune pre-bulk-adjust backups older than 48 hours — runs hourly
+Schedule::command('app:prune-bulk-adjust-backups --hours=48')
+    ->hourly();

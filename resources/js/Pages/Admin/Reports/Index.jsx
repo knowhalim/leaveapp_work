@@ -1,8 +1,11 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { FileText, Building2, Users, Calendar } from 'lucide-react';
 
 export default function ReportsIndex() {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
+
     const reports = [
         {
             name: 'Leave Report',
@@ -19,8 +22,8 @@ export default function ReportsIndex() {
             color: 'bg-green-500',
         },
         {
-            name: 'Employee Report',
-            description: 'View individual employee leave balances and usage',
+            name: 'Leave Summary Report',
+            description: 'View individual user leave balances and usage',
             href: '/reports/employee',
             icon: Users,
             color: 'bg-purple-500',

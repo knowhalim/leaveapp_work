@@ -12,6 +12,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\EmailService;
 use App\Services\LeaveBalanceService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -21,6 +22,69 @@ use Inertia\Inertia;
 
 class UserController extends Controller
 {
+    private function generateEmployeeNumber(): string
+    {
+        $max = Employee::where('employee_number', 'like', 'AISG%')
+            ->pluck('employee_number')
+            ->map(function ($num) {
+                $suffix = substr($num, 4);
+                return ctype_digit($suffix) ? (int) $suffix : 0;
+            })
+            ->max() ?? 0;
+
+        $next = $max + 1;
+        $padLength = max(4, strlen((string) $next));
+        return 'AISG' . str_pad($next, $padLength, '0', STR_PAD_LEFT);
+    }
+
+    private function parseDateFlexible(string $value): ?string
+    {
+        $formats = ['Y-m-d', 'd/m/Y', 'j/n/Y', 'd-m-Y', 'j-n-Y', 'm/d/Y', 'd.m.Y'];
+        foreach ($formats as $format) {
+            try {
+                $parsed = Carbon::createFromFormat($format, $value);
+                if ($parsed && $parsed->format(match($format) {
+                    'Y-m-d' => 'Y-m-d',
+                    default => $format,
+                }) === $value || true) {
+                    return $parsed->format('Y-m-d');
+                }
+            } catch (\Exception) {
+                continue;
+            }
+        }
+        return null;
+    }
+
+    private function friendlyImportError(\Exception $e): string
+    {
+        $msg = $e->getMessage();
+
+        if (str_contains($msg, 'parse') || str_contains($msg, 'time string') || str_contains($msg, 'Unexpected character')) {
+            return 'Invalid date format. Use YYYY-MM-DD (e.g. 2026-04-27) or DD/MM/YYYY (e.g. 27/04/2026).';
+        }
+        if (str_contains($msg, 'Duplicate entry') || str_contains($msg, 'UNIQUE constraint')) {
+            if (str_contains($msg, 'email') || str_contains($msg, 'users_email')) {
+                return 'Email address is already registered in the system.';
+            }
+            if (str_contains($msg, 'employee_number')) {
+                return 'Employee number is already in use.';
+            }
+            if (str_contains($msg, 'nric')) {
+                return 'NRIC is already registered in the system.';
+            }
+            return 'A duplicate value was found. Please check email, employee number, and NRIC are unique.';
+        }
+        if (str_contains($msg, 'foreign key') || str_contains($msg, 'FOREIGN KEY')) {
+            return 'A referenced record (department, employee type, or supervisor) does not exist.';
+        }
+        if (str_contains($msg, 'not null') || str_contains($msg, 'NOT NULL')) {
+            return 'A required field is missing or empty.';
+        }
+
+        return 'Unable to create record. Please check the data in this row and try again.';
+    }
+
     private function getEligibleSupervisors(): array
     {
         return Employee::whereHas('user', function ($q) {
@@ -43,7 +107,7 @@ class UserController extends Controller
 
     public function index(Request $request)
     {
-        $query = User::with('employee.department', 'employee.employeeType', 'employee.supervisors');
+        $query = User::with('employee.department', 'employee.employeeType', 'employee.supervisors.user');
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -104,13 +168,15 @@ class UserController extends Controller
 
     public function store(Request $request, LeaveBalanceService $balanceService, EmailService $emailService)
     {
+        $passwordLoginEnabled = (bool) SystemSetting::get('password_login_enabled', true);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => [$passwordLoginEnabled ? 'required' : 'nullable', 'string', 'min:8'],
             'role' => ['required', Rule::in($this->allowedRoles())],
             'is_active' => ['boolean'],
-            'employee_number' => ['required', 'string', 'unique:employees,employee_number'],
+            'employee_number' => ['nullable', 'string', 'unique:employees,employee_number'],
             'nric' => ['nullable', 'string', 'max:20', 'unique:employees,nric'],
             'department_id' => ['nullable', 'exists:departments,id'],
             'employee_type_id' => ['nullable', 'exists:employee_types,id'],
@@ -123,21 +189,21 @@ class UserController extends Controller
             'supervisors.*.is_primary' => ['boolean'],
         ]);
 
-        $plainPassword = $validated['password'];
+        $plainPassword = $passwordLoginEnabled ? ($validated['password'] ?? null) : null;
         $sendWelcomeEmail = $validated['send_welcome_email'] ?? true;
 
         $user = DB::transaction(function () use ($validated, $balanceService, $plainPassword) {
             $user = User::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
-                'password' => Hash::make($plainPassword),
+                'password' => $plainPassword ? Hash::make($plainPassword) : null,
                 'role' => $validated['role'],
                 'is_active' => $validated['is_active'] ?? true,
             ]);
 
             $employee = Employee::create([
                 'user_id' => $user->id,
-                'employee_number' => $validated['employee_number'],
+                'employee_number' => !empty($validated['employee_number']) ? $validated['employee_number'] : $this->generateEmployeeNumber(),
                 'nric' => $validated['nric'] ?? null,
                 'department_id' => $validated['department_id'] ?? null,
                 'employee_type_id' => $validated['employee_type_id'] ?? null,
@@ -243,7 +309,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function update(Request $request, User $user)
+    public function update(Request $request, User $user, EmailService $emailService)
     {
         if (auth()->user()->role === 'admin') {
             if ($user->role === 'super_admin') {
@@ -280,6 +346,8 @@ class UserController extends Controller
             'supervisors.*.is_primary' => ['boolean'],
         ]);
 
+        $previousRole = $user->role;
+
         DB::transaction(function () use ($validated, $user) {
             $userData = [
                 'name' => $validated['name'],
@@ -295,15 +363,32 @@ class UserController extends Controller
             $user->update($userData);
 
             if ($user->employee) {
+                $oldEmployeeTypeId = $user->employee->employee_type_id;
+                $newEmployeeTypeId = $validated['employee_type_id'] ?? null;
+
                 $user->employee->update([
                     'employee_number' => $validated['employee_number'],
                     'nric' => $validated['nric'],
                     'department_id' => $validated['department_id'],
-                    'employee_type_id' => $validated['employee_type_id'],
+                    'employee_type_id' => $newEmployeeTypeId,
                     'position' => $validated['position'],
                     'hire_date' => $validated['hire_date'],
                     'phone' => $validated['phone'],
                 ]);
+
+                // If employee type changed, update entitled_days for all leave types in current financial year
+                if ($oldEmployeeTypeId !== $newEmployeeTypeId && $newEmployeeTypeId) {
+                    $financialYear = \App\Models\SystemSetting::getFinancialYear();
+                    $leaveTypes = \App\Models\LeaveType::active()->get();
+                    foreach ($leaveTypes as $leaveType) {
+                        $entitledDays = $leaveType->getAllowanceForEmployeeType($newEmployeeTypeId);
+                        \App\Models\EmployeeLeaveBalance::where([
+                            'employee_id' => $user->employee->id,
+                            'leave_type_id' => $leaveType->id,
+                            'financial_year' => $financialYear,
+                        ])->update(['entitled_days' => $entitledDays]);
+                    }
+                }
 
                 // Update leave balances
                 if (!empty($validated['leave_balances'])) {
@@ -337,6 +422,14 @@ class UserController extends Controller
 
             ActivityLog::log('user.updated', $user);
         });
+
+        if ($previousRole !== $user->role) {
+            try {
+                $emailService->sendRoleChangedEmail($user->fresh(), $previousRole, auth()->user());
+            } catch (\Throwable $e) {
+                \Log::warning('Role-changed email failed', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            }
+        }
 
         return redirect()->route('users.index')
             ->with('success', 'User updated successfully.');
@@ -479,8 +572,8 @@ class UserController extends Controller
     {
         $leaveTypes = LeaveType::active()->orderBy('code')->get(['code', 'name', 'default_days']);
 
-        $headers = ['name', 'email', 'employee_number', 'nric', 'department', 'employee_type', 'position', 'hire_date', 'phone'];
-        $sampleRow = ['John Doe', 'john@example.com', 'EMP001', 'S1234567A', 'Engineering', 'Full-Time', 'Software Engineer', '2024-01-15', '+65 9123 4567'];
+        $headers = ['name', 'email', 'nric', 'department', 'employee_type', 'position', 'hire_date', 'phone'];
+        $sampleRow = ['John Doe', 'john@example.com', 'S1234567A', 'Innovation', 'Full-Time', 'Software Engineer', '2024-01-15', '+65 9123 4567'];
 
         foreach ($leaveTypes as $lt) {
             $headers[] = $lt->code;
@@ -530,7 +623,7 @@ class UserController extends Controller
         // Normalize headers (trim whitespace, lowercase)
         $headers = array_map(fn ($h) => strtolower(trim($h)), $headers);
 
-        $requiredHeaders = ['name', 'email', 'employee_number'];
+        $requiredHeaders = ['name', 'email'];
         $missingHeaders = array_diff($requiredHeaders, $headers);
         if (!empty($missingHeaders)) {
             fclose($handle);
@@ -601,9 +694,7 @@ class UserController extends Controller
             } elseif (in_array(strtolower($data['email']), $existingEmails)) {
                 $rowErrors[] = 'Email already exists';
             }
-            if (empty($data['employee_number'])) {
-                $rowErrors[] = 'Employee number is required';
-            } elseif (in_array($data['employee_number'], $existingEmpNumbers)) {
+            if (!empty($data['employee_number']) && in_array($data['employee_number'], $existingEmpNumbers)) {
                 $rowErrors[] = 'Employee number already exists';
             }
 
@@ -611,6 +702,11 @@ class UserController extends Controller
             $nric = $data['nric'] ?? '';
             if (!empty($nric) && in_array($nric, $existingNrics)) {
                 $rowErrors[] = 'NRIC already exists';
+            }
+
+            // Validate hire_date format if provided
+            if (!empty($data['hire_date']) && $this->parseDateFlexible($data['hire_date']) === null) {
+                $rowErrors[] = "Invalid hire date '{$data['hire_date']}'. Use YYYY-MM-DD (e.g. 2026-04-27) or DD/MM/YYYY (e.g. 27/04/2026).";
             }
 
             if (!empty($rowErrors)) {
@@ -639,26 +735,28 @@ class UserController extends Controller
             }
 
             // Create user + employee in transaction
-            $plainPassword = Str::random(10);
+            $passwordLoginEnabled = (bool) SystemSetting::get('password_login_enabled', true);
+            $plainPassword = $passwordLoginEnabled ? Str::random(10) : null;
+            $employeeNumber = !empty($data['employee_number']) ? $data['employee_number'] : $this->generateEmployeeNumber();
 
             try {
-                $newUser = DB::transaction(function () use ($data, $plainPassword, $departmentId, $employeeTypeId, $supervisorsList, $balanceService, $nric, $leaveTypeMap, $financialYear) {
+                $newUser = DB::transaction(function () use ($data, $plainPassword, $departmentId, $employeeTypeId, $supervisorsList, $balanceService, $nric, $leaveTypeMap, $financialYear, $employeeNumber) {
                     $newUser = User::create([
                         'name' => $data['name'],
                         'email' => $data['email'],
-                        'password' => Hash::make($plainPassword),
+                        'password' => $plainPassword ? Hash::make($plainPassword) : null,
                         'role' => 'employee',
                         'is_active' => true,
                     ]);
 
                     $employee = Employee::create([
                         'user_id' => $newUser->id,
-                        'employee_number' => $data['employee_number'],
+                        'employee_number' => $employeeNumber,
                         'nric' => !empty($nric) ? $nric : null,
                         'department_id' => $departmentId,
                         'employee_type_id' => $employeeTypeId,
                         'position' => !empty($data['position']) ? $data['position'] : null,
-                        'hire_date' => !empty($data['hire_date']) ? $data['hire_date'] : null,
+                        'hire_date' => !empty($data['hire_date']) ? $this->parseDateFlexible($data['hire_date']) : null,
                         'phone' => !empty($data['phone']) ? $data['phone'] : null,
                     ]);
 
@@ -694,14 +792,14 @@ class UserController extends Controller
 
                 // Track for email sending and uniqueness
                 $existingEmails[] = strtolower($data['email']);
-                $existingEmpNumbers[] = $data['employee_number'];
+                $existingEmpNumbers[] = $employeeNumber;
                 if (!empty($nric)) {
                     $existingNrics[] = $nric;
                 }
                 $createdUsers[] = ['user' => $newUser, 'password' => $plainPassword];
                 $successCount++;
             } catch (\Exception $e) {
-                $errors[] = ['row' => $rowNumber, 'message' => 'Failed to create: ' . $e->getMessage()];
+                $errors[] = ['row' => $rowNumber, 'message' => $this->friendlyImportError($e)];
             }
         }
 
@@ -772,7 +870,7 @@ class UserController extends Controller
         return back()->with('success', "Supervisors updated for {$count} user(s).");
     }
 
-    public function toggleStatus(User $user)
+    public function toggleStatus(User $user, LeaveBalanceService $balanceService)
     {
         if ($user->id === auth()->id()) {
             return back()->with('error', 'You cannot deactivate your own account.');
@@ -787,7 +885,13 @@ class UserController extends Controller
             }
         }
 
+        $wasInactive = !$user->is_active;
         $user->update(['is_active' => !$user->is_active]);
+
+        // When reactivating, ensure the employee has balance records for the current financial year
+        if ($wasInactive && $user->employee) {
+            $balanceService->initializeBalancesForEmployee($user->employee);
+        }
 
         ActivityLog::log($user->is_active ? 'user.activated' : 'user.deactivated', $user);
 

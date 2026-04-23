@@ -1,7 +1,9 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
 export default function DepartmentCreate({ managers }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const { data, setData, post, processing, errors } = useForm({
         name: '',
         manager_id: '',
@@ -38,14 +40,14 @@ export default function DepartmentCreate({ managers }) {
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700">
-                                Department Manager
+                                Department {getRoleLabel('manager')}
                             </label>
                             <select
                                 value={data.manager_id}
                                 onChange={(e) => setData('manager_id', e.target.value)}
                                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                             >
-                                <option value="">Select manager (optional)</option>
+                                <option value="">Select {getRoleLabel('manager')} (optional)</option>
                                 {managers.map((manager) => (
                                     <option key={manager.id} value={manager.id}>
                                         {manager.name} ({manager.email})

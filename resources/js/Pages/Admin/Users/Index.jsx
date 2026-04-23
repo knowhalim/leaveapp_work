@@ -147,6 +147,7 @@ export default function UsersIndex({ users, filters, availableSupervisors, posit
     const [showModal, setShowModal] = useState(false);
     const [showPositionModal, setShowPositionModal] = useState(false);
     const [processing, setProcessing] = useState(false);
+    const [approversModalUser, setApproversModalUser] = useState(null);
 
     const canModify = (user) => {
         if (auth.user.role !== 'admin') return true;
@@ -359,6 +360,9 @@ export default function UsersIndex({ users, filters, availableSupervisors, posit
                                 Position
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                Approver
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Status
                             </th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -369,7 +373,7 @@ export default function UsersIndex({ users, filters, availableSupervisors, posit
                     <tbody className="bg-white divide-y divide-gray-200">
                         {users.data.length === 0 ? (
                             <tr>
-                                <td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">
+                                <td colSpan="8" className="px-6 py-4 text-center text-sm text-gray-500">
                                     No users found
                                 </td>
                             </tr>
@@ -414,6 +418,27 @@ export default function UsersIndex({ users, filters, availableSupervisors, posit
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {user.employee?.position || <span className="text-gray-300">—</span>}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {(() => {
+                                            const sups = user.employee?.supervisors || [];
+                                            if (sups.length === 0) return <span className="text-gray-300">—</span>;
+                                            const primary = sups.find((s) => s.pivot?.is_primary) || sups[0];
+                                            const name = primary?.user?.name || '—';
+                                            if (sups.length > 1) {
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setApproversModalUser(user)}
+                                                        className="text-indigo-600 hover:text-indigo-800 hover:underline"
+                                                        title="View all approvers"
+                                                    >
+                                                        {name} +{sups.length - 1}
+                                                    </button>
+                                                );
+                                            }
+                                            return <span>{name}</span>;
+                                        })()}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -499,6 +524,66 @@ export default function UsersIndex({ users, filters, availableSupervisors, posit
                     onSubmit={handlePositionSubmit}
                     processing={processing}
                 />
+            )}
+
+            {approversModalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 flex flex-col max-h-[80vh]">
+                        <div className="flex items-center justify-between px-5 py-4 border-b">
+                            <div>
+                                <h3 className="text-base font-semibold text-gray-900">
+                                    Approvers for {approversModalUser.name}
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    {(approversModalUser.employee?.supervisors || []).length} approver(s) assigned
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setApproversModalUser(null)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+                            {(approversModalUser.employee?.supervisors || []).map((sup) => (
+                                <div
+                                    key={sup.id}
+                                    className="flex items-center gap-3 px-3 py-2 rounded-md bg-gray-50"
+                                >
+                                    <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                                        <span className="text-xs font-medium text-indigo-600">
+                                            {sup.user?.name?.charAt(0)?.toUpperCase()}
+                                        </span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-medium text-gray-900 truncate">
+                                                {sup.user?.name || '—'}
+                                            </span>
+                                            {sup.pivot?.is_primary && (
+                                                <span className="inline-flex px-1.5 py-0.5 text-xs font-semibold rounded bg-indigo-100 text-indigo-700">
+                                                    Primary
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-gray-500 truncate">
+                                            {sup.user?.email}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="px-5 py-4 border-t flex justify-end">
+                            <button
+                                onClick={() => setApproversModalUser(null)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </AuthenticatedLayout>
     );

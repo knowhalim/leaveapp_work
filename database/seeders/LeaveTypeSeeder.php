@@ -334,6 +334,7 @@ class LeaveTypeSeeder extends Seeder
         ];
 
         foreach ($leaveTypes as $leaveTypeData) {
+            $leaveTypeData['allow_attachment'] = $leaveTypeData['requires_attachment'];
             LeaveType::updateOrCreate(
                 ['code' => $leaveTypeData['code']],
                 $leaveTypeData

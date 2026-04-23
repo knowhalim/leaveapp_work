@@ -1,14 +1,28 @@
 import { Head } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Building2, Download } from 'lucide-react';
+import { Building2, Download, Info } from 'lucide-react';
 
-export default function DepartmentReport({ departments, financialYear }) {
+export default function DepartmentReport({ departments, financialYear, financialYears }) {
+    const handleYearChange = (year) => {
+        router.get('/reports/department', { financial_year: year }, { preserveState: true });
+    };
+
     return (
         <AuthenticatedLayout title="Department Report">
             <Head title="Department Report" />
 
-            <div className="mb-6 flex justify-between items-center">
-                <h2 className="text-lg font-medium text-gray-900">Financial Year: {financialYear}</h2>
+            {/* Header row: year selector + export */}
+            <div className="mb-4 flex flex-wrap justify-between items-center gap-3">
+                <select
+                    value={financialYear}
+                    onChange={(e) => handleYearChange(e.target.value)}
+                    className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                >
+                    {(financialYears || [financialYear]).map((yr) => (
+                        <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                </select>
                 <a
                     href={`/reports/export?type=department&financial_year=${financialYear}`}
                     className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -16,6 +30,17 @@ export default function DepartmentReport({ departments, financialYear }) {
                     <Download className="h-4 w-4" />
                     Export CSV
                 </a>
+            </div>
+
+            {/* Explanation banner */}
+            <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 text-sm text-blue-800">
+                <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+                <span>
+                    This report shows leave activity grouped by department for the selected financial year.
+                    <strong> Total Requests</strong> counts all submitted leave requests (any status).
+                    <strong> Approved</strong> is the number of approved requests.
+                    <strong> Total Days Taken</strong> is the sum of working days deducted from approved requests only.
+                </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -46,13 +71,6 @@ export default function DepartmentReport({ departments, financialYear }) {
                                     <dd className="text-xl font-bold text-blue-600">{department.leave_stats?.total_days_taken || 0}</dd>
                                 </div>
                             </dl>
-
-                            {department.manager && (
-                                <div className="mt-4 pt-4 border-t">
-                                    <p className="text-xs text-gray-500">Manager</p>
-                                    <p className="text-sm font-medium text-gray-900">{department.manager.name}</p>
-                                </div>
-                            )}
                         </div>
                     </div>
                 ))}

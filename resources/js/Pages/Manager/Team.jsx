@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { formatDate, getStatusColor } from '@/lib/utils';
-import { Calendar, Clock, BookOpen } from 'lucide-react';
+import { Calendar, Clock, BookOpen, Users } from 'lucide-react';
 
 export default function ManagerTeam({ upcomingLeave, leaveHistory, leaveBalances, teamMembers, financialYear }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const [activeTab, setActiveTab] = useState('upcoming');
     const [selectedMember, setSelectedMember] = useState('all');
 
@@ -12,7 +14,12 @@ export default function ManagerTeam({ upcomingLeave, leaveHistory, leaveBalances
         { key: 'upcoming', label: 'Upcoming Leave', icon: Calendar },
         { key: 'history', label: 'Leave History', icon: Clock },
         { key: 'balances', label: 'Leave Balances', icon: BookOpen },
+        { key: 'members', label: 'Members', icon: Users },
     ];
+
+    const filteredMembers = selectedMember === 'all'
+        ? teamMembers
+        : teamMembers.filter(m => m.id == selectedMember);
 
     const filteredUpcoming = selectedMember === 'all'
         ? upcomingLeave
@@ -67,14 +74,14 @@ export default function ManagerTeam({ upcomingLeave, leaveHistory, leaveBalances
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                {['Employee', 'Leave Type', 'Start', 'End', 'Days', 'Status'].map(h => (
+                                {[getRoleLabel('employee'), 'Leave Type', 'Start', 'End', 'Days', 'Status', 'Actions'].map(h => (
                                     <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {filteredUpcoming.length === 0 ? (
-                                <tr><td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">No upcoming leave</td></tr>
+                                <tr><td colSpan="7" className="px-6 py-4 text-center text-sm text-gray-500">No upcoming leave</td></tr>
                             ) : filteredUpcoming.map(leave => (
                                 <tr key={leave.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{leave.employee?.user?.name}</td>
@@ -90,6 +97,9 @@ export default function ManagerTeam({ upcomingLeave, leaveHistory, leaveBalances
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(leave.status)}`}>{leave.status}</span>
                                     </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                        <Link href={`/leaves/${leave.id}`} className="text-indigo-600 hover:text-indigo-900">View</Link>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -103,7 +113,7 @@ export default function ManagerTeam({ upcomingLeave, leaveHistory, leaveBalances
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                {['Employee', 'Leave Type', 'Start', 'End', 'Days', 'Status', 'Actions'].map(h => (
+                                {[getRoleLabel('employee'), 'Leave Type', 'Start', 'End', 'Days', 'Status', 'Actions'].map(h => (
                                     <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
                                 ))}
                             </tr>
@@ -138,6 +148,54 @@ export default function ManagerTeam({ upcomingLeave, leaveHistory, leaveBalances
                             Showing {leaveHistory.from}–{leaveHistory.to} of {leaveHistory.total}
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Members */}
+            {activeTab === 'members' && (
+                <div className="space-y-4">
+                    {filteredMembers.length === 0 ? (
+                        <div className="bg-white shadow rounded-lg p-6 text-center text-sm text-gray-500">No team members</div>
+                    ) : filteredMembers.map(member => (
+                        <div key={member.id} className="bg-white shadow rounded-lg overflow-hidden">
+                            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+                                <h3 className="text-sm font-semibold text-gray-900">{member.user?.name}</h3>
+                                <p className="text-xs text-gray-500">{member.user?.email} · {getRoleLabel(member.user?.role)}</p>
+                            </div>
+                            <div className="p-6">
+                                <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
+                                    <div>
+                                        <dt className="text-xs font-medium text-gray-500 uppercase">Phone</dt>
+                                        <dd className="mt-1 text-sm text-gray-900">{member.phone || '—'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs font-medium text-gray-500 uppercase">Date of Birth</dt>
+                                        <dd className="mt-1 text-sm text-gray-900">{member.date_of_birth ? formatDate(member.date_of_birth) : '—'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs font-medium text-gray-500 uppercase">Gender</dt>
+                                        <dd className="mt-1 text-sm text-gray-900 capitalize">{member.gender || '—'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs font-medium text-gray-500 uppercase">Position</dt>
+                                        <dd className="mt-1 text-sm text-gray-900">{member.position || '—'}</dd>
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <dt className="text-xs font-medium text-gray-500 uppercase">Address</dt>
+                                        <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line">{member.address || '—'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs font-medium text-gray-500 uppercase">Emergency Contact Name</dt>
+                                        <dd className="mt-1 text-sm text-gray-900">{member.emergency_contact_name || '—'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs font-medium text-gray-500 uppercase">Emergency Contact Phone</dt>
+                                        <dd className="mt-1 text-sm text-gray-900">{member.emergency_contact_phone || '—'}</dd>
+                                    </div>
+                                </dl>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
 

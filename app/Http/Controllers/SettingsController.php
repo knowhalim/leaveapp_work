@@ -24,6 +24,7 @@ class SettingsController extends Controller
             'role_label_manager' => SystemSetting::get('role_label_manager', 'Manager'),
             'role_label_admin' => SystemSetting::get('role_label_admin', 'Admin'),
             'role_label_super_admin' => SystemSetting::get('role_label_super_admin', 'Super Admin'),
+            'password_login_enabled' => (bool) SystemSetting::get('password_login_enabled', true),
         ];
 
         $apiTokens = [];
@@ -53,10 +54,19 @@ class SettingsController extends Controller
             'role_label_manager' => ['required', 'string', 'max:50'],
             'role_label_admin' => ['required', 'string', 'max:50'],
             'role_label_super_admin' => ['required', 'string', 'max:50'],
+            'password_login_enabled' => ['sometimes', 'boolean'],
         ]);
 
         foreach ($validated as $key => $value) {
-            $type = is_array($value) ? 'array' : (is_int($value) ? 'integer' : 'string');
+            if ($key === 'password_login_enabled') {
+                $type = 'boolean';
+            } elseif (is_array($value)) {
+                $type = 'array';
+            } elseif (is_int($value)) {
+                $type = 'integer';
+            } else {
+                $type = 'string';
+            }
             SystemSetting::set($key, $value, $type, 'general');
         }
 
@@ -171,6 +181,229 @@ class SettingsController extends Controller
         return back()->with('success', 'Employee type deleted successfully.');
     }
 
+    public function emailTemplates()
+    {
+        $user = auth()->user();
+        $roles = $user->isSuperAdmin()
+            ? ['employee', 'manager', 'admin', 'super_admin']
+            : ['employee', 'manager'];
+
+        $roleLabels = [
+            'employee'    => SystemSetting::get('role_label_employee', 'Employee'),
+            'manager'     => SystemSetting::get('role_label_manager', 'Manager'),
+            'admin'       => SystemSetting::get('role_label_admin', 'Admin'),
+            'super_admin' => SystemSetting::get('role_label_super_admin', 'Super Admin'),
+        ];
+
+        $templates = [];
+        foreach ($roles as $role) {
+            $default = $this->defaultOnboardingHtml($role);
+            $templates[$role] = [
+                'label'   => $roleLabels[$role],
+                'enabled' => (bool) SystemSetting::get("onboarding_custom_{$role}_enabled", false),
+                'body'    => SystemSetting::get("onboarding_custom_{$role}_body", $default),
+                'default' => $default,
+            ];
+        }
+
+        return Inertia::render('Admin/Settings/EmailTemplates', [
+            'roles'     => $roles,
+            'templates' => $templates,
+        ]);
+    }
+
+    public function updateEmailTemplates(Request $request)
+    {
+        $user = auth()->user();
+        $allowedRoles = $user->isSuperAdmin()
+            ? ['employee', 'manager', 'admin', 'super_admin']
+            : ['employee', 'manager'];
+
+        $rules = [];
+        foreach ($allowedRoles as $role) {
+            $rules["templates.{$role}.enabled"] = ['boolean'];
+            $rules["templates.{$role}.body"]    = ['nullable', 'string', 'max:20000'];
+        }
+
+        $validated = $request->validate($rules);
+
+        foreach ($allowedRoles as $role) {
+            $enabled = (bool) ($validated['templates'][$role]['enabled'] ?? false);
+            $body    = (string) ($validated['templates'][$role]['body'] ?? '');
+            SystemSetting::set("onboarding_custom_{$role}_enabled", $enabled, 'boolean', 'email_template');
+            SystemSetting::set("onboarding_custom_{$role}_body", $body, 'string', 'email_template');
+        }
+
+        ActivityLog::log('settings.email_templates_updated', null, [
+            'roles' => $allowedRoles,
+        ]);
+
+        return back()->with('success', 'Email templates updated successfully.');
+    }
+
+    protected function defaultOnboardingHtml(string $role): string
+    {
+        switch ($role) {
+            case 'manager':
+                return <<<'HTML'
+<p style="margin: 0 0 15px 0;">As a <strong>{{role}}</strong>, you have additional responsibilities in {{company}}:</p>
+
+<ol style="margin: 0; padding-left: 20px;">
+    <li style="margin-bottom: 10px;">
+        <strong>Approve/Reject Leave Requests</strong><br>
+        <span style="color: #6b7280;">Review and process leave requests from your team members. You'll receive email notifications when new requests are submitted.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>View Team Calendar</strong><br>
+        <span style="color: #6b7280;">See who in your team is on leave at any given time to help with planning and coverage.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Monitor Team Leave Balances</strong><br>
+        <span style="color: #6b7280;">Keep track of your team's remaining leave days to ensure fair distribution and prevent year-end rush.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Submit Your Own Leave</strong><br>
+        <span style="color: #6b7280;">As a {{role}}, your leave requests will be routed to administrators for approval.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Generate Team Reports</strong><br>
+        <span style="color: #6b7280;">Access reports on team attendance and leave patterns to support workforce planning.</span>
+    </li>
+</ol>
+
+<div style="background-color: #eff6ff; border-radius: 6px; padding: 15px; margin-top: 15px;">
+    <p style="margin: 0; font-weight: bold; color: #1d4ed8;">{{role}} Tips</p>
+    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #1e40af;">
+        <li>Review pending requests promptly to help your team plan their time off.</li>
+        <li>Check the team calendar before approving to ensure adequate coverage.</li>
+        <li>Add notes when rejecting requests to provide clear feedback.</li>
+    </ul>
+</div>
+HTML;
+
+            case 'admin':
+                return <<<'HTML'
+<p style="margin: 0 0 15px 0;">As an <strong>{{role}}</strong>, you have system management capabilities:</p>
+
+<ol style="margin: 0; padding-left: 20px;">
+    <li style="margin-bottom: 10px;">
+        <strong>Manage Users</strong><br>
+        <span style="color: #6b7280;">Create, edit, and deactivate user accounts. Assign roles and departments to employees.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Manage Departments</strong><br>
+        <span style="color: #6b7280;">Create and organize departments, assign department managers, and manage team structures.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Configure Leave Types</strong><br>
+        <span style="color: #6b7280;">Set up different leave categories with their allowances, rules, and requirements.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Approve Manager Leave Requests</strong><br>
+        <span style="color: #6b7280;">Process leave requests from managers and other administrators.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Adjust Leave Balances</strong><br>
+        <span style="color: #6b7280;">Make manual adjustments to employee leave balances when needed (e.g., special circumstances, corrections).</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Generate Reports</strong><br>
+        <span style="color: #6b7280;">Access organization-wide leave reports and analytics for HR planning.</span>
+    </li>
+</ol>
+
+<div style="background-color: #fef3c7; border-radius: 6px; padding: 15px; margin-top: 15px;">
+    <p style="margin: 0; font-weight: bold; color: #92400e;">{{role}} Responsibilities</p>
+    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #92400e;">
+        <li>Ensure employee records are accurate and up to date.</li>
+        <li>Review and update leave policies at the start of each financial year.</li>
+        <li>Monitor system activity logs for any unusual patterns.</li>
+    </ul>
+</div>
+HTML;
+
+            case 'super_admin':
+                return <<<'HTML'
+<p style="margin: 0 0 15px 0;">As a <strong>{{role}}</strong>, you have full system control:</p>
+
+<ol style="margin: 0; padding-left: 20px;">
+    <li style="margin-bottom: 10px;">
+        <strong>Full User Management</strong><br>
+        <span style="color: #6b7280;">Create and manage all user accounts including other administrators. Assign any role to any user.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>System Configuration</strong><br>
+        <span style="color: #6b7280;">Configure system-wide settings including financial year, carry-forward limits, and email notifications.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Email Settings</strong><br>
+        <span style="color: #6b7280;">Configure SMTP settings and manage email notifications across the system.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Employee Types Management</strong><br>
+        <span style="color: #6b7280;">Define employee categories (full-time, part-time, contract) with different leave entitlements.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Holiday Calendar</strong><br>
+        <span style="color: #6b7280;">Manage public holidays that affect leave calculations across the organization.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Activity Logs</strong><br>
+        <span style="color: #6b7280;">Access complete audit trails of all system activities for compliance and security.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Year-End Processing</strong><br>
+        <span style="color: #6b7280;">Initialize leave balances for new financial years and process carry-forward calculations.</span>
+    </li>
+</ol>
+
+<div style="background-color: #fee2e2; border-radius: 6px; padding: 15px; margin-top: 15px;">
+    <p style="margin: 0; font-weight: bold; color: #991b1b;">{{role}} Security Notice</p>
+    <ul style="margin: 10px 0 0 0; padding-left: 20px; color: #991b1b;">
+        <li>Your account has the highest privilege level. Keep your credentials secure.</li>
+        <li>All your actions are logged for audit purposes.</li>
+        <li>Review system settings periodically to ensure proper configuration.</li>
+        <li>Limit the number of {{role}} accounts to maintain security.</li>
+    </ul>
+</div>
+HTML;
+
+            case 'employee':
+            default:
+                return <<<'HTML'
+<p style="margin: 0 0 15px 0;">As a <strong>{{role}}</strong>, here's what you can do in {{company}}:</p>
+
+<ol style="margin: 0; padding-left: 20px;">
+    <li style="margin-bottom: 10px;">
+        <strong>View Your Dashboard</strong><br>
+        <span style="color: #6b7280;">See your leave balances, upcoming leaves, and recent activity at a glance.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Submit Leave Requests</strong><br>
+        <span style="color: #6b7280;">Apply for annual leave, sick leave, or other leave types. Select your dates, add a reason, and submit for approval.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Track Your Leave Balance</strong><br>
+        <span style="color: #6b7280;">Monitor your remaining leave days for each leave type throughout the year.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>View Leave History</strong><br>
+        <span style="color: #6b7280;">Access your complete leave history including approved, rejected, and pending requests.</span>
+    </li>
+    <li style="margin-bottom: 10px;">
+        <strong>Update Your Profile</strong><br>
+        <span style="color: #6b7280;">Keep your personal information and contact details up to date.</span>
+    </li>
+</ol>
+
+<div style="background-color: #eff6ff; border-radius: 6px; padding: 15px; margin-top: 15px;">
+    <p style="margin: 0; font-weight: bold; color: #1d4ed8;">Quick Tip</p>
+    <p style="margin: 10px 0 0 0; color: #1e40af;">Submit leave requests in advance whenever possible to ensure smooth approval and team planning.</p>
+</div>
+HTML;
+        }
+    }
+
     public function email()
     {
         // Read from database first, fall back to .env configuration
@@ -260,6 +493,7 @@ class SettingsController extends Controller
             'google_drive_folder_id' => SystemSetting::get('google_drive_folder_id', ''),
             'google_drive_connected_email' => SystemSetting::get('google_drive_connected_email', ''),
             'google_drive_connected' => !empty(SystemSetting::get('google_refresh_token', '')),
+            'google_callback_url' => url('/settings/google-drive/callback'),
         ];
 
         // List existing backup files

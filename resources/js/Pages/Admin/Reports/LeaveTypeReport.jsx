@@ -1,14 +1,40 @@
 import { Head } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Calendar } from 'lucide-react';
+import { Calendar, Info } from 'lucide-react';
 
-export default function LeaveTypeReport({ leaveTypes, financialYear }) {
+export default function LeaveTypeReport({ leaveTypes, financialYear, financialYears }) {
+    const handleYearChange = (year) => {
+        router.get('/reports/leave-type', { financial_year: year }, { preserveState: true });
+    };
+
     return (
         <AuthenticatedLayout title="Leave Type Report">
             <Head title="Leave Type Report" />
 
-            <div className="mb-6">
-                <h2 className="text-lg font-medium text-gray-900">Financial Year: {financialYear}</h2>
+            {/* Year selector */}
+            <div className="mb-4 flex justify-start">
+                <select
+                    value={financialYear}
+                    onChange={(e) => handleYearChange(e.target.value)}
+                    className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                >
+                    {(financialYears || [financialYear]).map((yr) => (
+                        <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Explanation banner */}
+            <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-6 text-sm text-blue-800">
+                <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+                <span>
+                    This report shows leave usage by type for the selected financial year.
+                    <strong> Total Requests</strong> counts all submitted requests of that type (any status).
+                    <strong> Approved</strong> is the number that were approved.
+                    <strong> Total Days Used</strong> is the sum of working days deducted across all approved requests of that type.
+                    <strong> Default Days</strong> and <strong>Max Days</strong> are the entitlement configuration for that leave type — they are not per-user and do not change with the year filter.
+                </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

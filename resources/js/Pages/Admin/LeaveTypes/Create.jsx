@@ -9,7 +9,10 @@ export default function LeaveTypeCreate({ employeeTypes }) {
         default_days: 0,
         max_days: '',
         is_paid: true,
+        allow_attachment: false,
         requires_attachment: false,
+        show_at_zero_balance: false,
+        hide_balance: false,
         allows_half_day: true,
         max_backdate_days: 0,
         is_active: true,
@@ -123,17 +126,6 @@ export default function LeaveTypeCreate({ employeeTypes }) {
                             <div className="flex items-center">
                                 <input
                                     type="checkbox"
-                                    id="requires_attachment"
-                                    checked={data.requires_attachment}
-                                    onChange={(e) => setData('requires_attachment', e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                />
-                                <label htmlFor="requires_attachment" className="ml-2 block text-sm text-gray-700">Requires Attachment</label>
-                            </div>
-
-                            <div className="flex items-center">
-                                <input
-                                    type="checkbox"
                                     id="allows_half_day"
                                     checked={data.allows_half_day}
                                     onChange={(e) => setData('allows_half_day', e.target.checked)}
@@ -152,6 +144,69 @@ export default function LeaveTypeCreate({ employeeTypes }) {
                                 />
                                 <label htmlFor="is_active" className="ml-2 block text-sm text-gray-700">Active</label>
                             </div>
+                        </div>
+
+                        {/* Attachment options */}
+                        <div className="space-y-2">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    id="allow_attachment"
+                                    checked={data.allow_attachment || data.requires_attachment}
+                                    disabled={data.requires_attachment}
+                                    onChange={(e) => setData('allow_attachment', e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-60"
+                                />
+                                <label htmlFor="allow_attachment" className="ml-2 block text-sm text-gray-700">Allow Attachment</label>
+                            </div>
+                            <div className="flex items-center pl-6">
+                                <input
+                                    type="checkbox"
+                                    id="requires_attachment"
+                                    checked={data.requires_attachment}
+                                    onChange={(e) => setData(d => ({
+                                        ...d,
+                                        requires_attachment: e.target.checked,
+                                        allow_attachment: e.target.checked ? true : d.allow_attachment,
+                                    }))}
+                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <label htmlFor="requires_attachment" className="ml-2 block text-sm text-gray-700">Require Attachment (enforced on submission)</label>
+                            </div>
+                            <p className="text-xs text-gray-500">If Allow is on, the upload field appears but is optional. If Require is on, the field appears and must be filled.</p>
+                        </div>
+
+                        {/* Dropdown visibility */}
+                        <div className="space-y-2">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    id="show_at_zero_balance"
+                                    checked={data.show_at_zero_balance}
+                                    onChange={(e) => setData('show_at_zero_balance', e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <label htmlFor="show_at_zero_balance" className="ml-2 block text-sm text-gray-700">Show in apply form even at 0 balance</label>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                                By default, a leave type is hidden from the employee's Apply-for-Leave dropdown once their available balance reaches 0.
+                                Turn this on for leave types that should remain selectable even when the balance is 0 — useful for types that allow negative balance,
+                                or where the admin expects employees to still request it (the submission balance check still applies).
+                            </p>
+                            <div className="flex items-center pt-2">
+                                <input
+                                    type="checkbox"
+                                    id="hide_balance"
+                                    checked={data.hide_balance}
+                                    onChange={(e) => setData('hide_balance', e.target.checked)}
+                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <label htmlFor="hide_balance" className="ml-2 block text-sm text-gray-700">Hide balance in apply dropdown</label>
+                            </div>
+                            <p className="text-xs text-gray-500">
+                                When on, the apply-for-leave dropdown shows just the leave type name (no "(X days left)").
+                                Useful for types like Unpaid Leave where displaying a negative balance looks odd.
+                            </p>
                         </div>
 
                         {/* Max Backdate Days */}

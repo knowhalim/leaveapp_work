@@ -3,8 +3,9 @@ import { useForm, Head, usePage } from '@inertiajs/react';
 import { Eye, EyeOff, LogIn, Mail, CheckCircle } from 'lucide-react';
 
 export default function Login() {
-    const { errors: pageErrors, company_name } = usePage().props;
-    const [mode, setMode] = useState('password'); // 'password' | 'magic'
+    const { errors: pageErrors, company_name, password_login_enabled } = usePage().props;
+    const passwordLoginEnabled = password_login_enabled !== false;
+    const [mode, setMode] = useState(passwordLoginEnabled ? 'password' : 'magic');
     const [showPassword, setShowPassword] = useState(false);
 
     const passwordForm = useForm({
@@ -51,34 +52,36 @@ export default function Login() {
                     </div>
 
                     <div className="bg-white shadow rounded-lg overflow-hidden">
-                        {/* Mode tabs */}
-                        <div className="flex border-b border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => switchMode('password')}
-                                className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                                    mode === 'password'
-                                        ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
-                                        : 'bg-gray-50 text-gray-500 hover:text-gray-700'
-                                }`}
-                            >
-                                Password
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => switchMode('magic')}
-                                className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                                    mode === 'magic'
-                                        ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
-                                        : 'bg-gray-50 text-gray-500 hover:text-gray-700'
-                                }`}
-                            >
-                                Magic Link
-                            </button>
-                        </div>
+                        {/* Mode tabs (only when password login is enabled) */}
+                        {passwordLoginEnabled && (
+                            <div className="flex border-b border-gray-200">
+                                <button
+                                    type="button"
+                                    onClick={() => switchMode('password')}
+                                    className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                                        mode === 'password'
+                                            ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
+                                            : 'bg-gray-50 text-gray-500 hover:text-gray-700'
+                                    }`}
+                                >
+                                    Password
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => switchMode('magic')}
+                                    className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                                        mode === 'magic'
+                                            ? 'bg-white text-indigo-600 border-b-2 border-indigo-600'
+                                            : 'bg-gray-50 text-gray-500 hover:text-gray-700'
+                                    }`}
+                                >
+                                    Magic Link
+                                </button>
+                            </div>
+                        )}
 
                         {/* Password login */}
-                        {mode === 'password' && (
+                        {passwordLoginEnabled && mode === 'password' && (
                             <form className="p-8 space-y-6" onSubmit={handlePasswordSubmit}>
                                 <div className="space-y-4">
                                     <div>
@@ -164,7 +167,7 @@ export default function Login() {
                         )}
 
                         {/* Magic link */}
-                        {mode === 'magic' && (
+                        {(!passwordLoginEnabled || mode === 'magic') && (
                             <div className="p-8">
                                 {magicLinkSent ? (
                                     <div className="text-center space-y-4">

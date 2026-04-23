@@ -1,9 +1,11 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Download, ExternalLink } from 'lucide-react';
 import { formatDate, getStatusColor } from '@/lib/utils';
 
-export default function LeaveReport({ leaveRequests, summary, departments, leaveTypes, filters, financialYear }) {
+export default function LeaveReport({ leaveRequests, summary, departments, leaveTypes, positions, filters, financialYear }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const handleFilterChange = (key, value) => {
         router.get('/reports/leave', { ...filters, [key]: value }, { preserveState: true });
     };
@@ -59,8 +61,15 @@ export default function LeaveReport({ leaveRequests, summary, departments, leave
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-lg shadow p-4 mb-6">
-                <div className="flex flex-wrap gap-4">
+            <div className="bg-white rounded-lg shadow p-4 mb-6 space-y-3">
+                <div className="flex flex-wrap gap-3">
+                    <input
+                        type="text"
+                        placeholder="Search name or email..."
+                        value={filters?.search || ''}
+                        onChange={(e) => handleFilterChange('search', e.target.value)}
+                        className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                    />
                     <select
                         value={filters?.department_id || ''}
                         onChange={(e) => handleFilterChange('department_id', e.target.value)}
@@ -70,6 +79,27 @@ export default function LeaveReport({ leaveRequests, summary, departments, leave
                         {departments.map((dept) => (
                             <option key={dept.id} value={dept.id}>{dept.name}</option>
                         ))}
+                    </select>
+                    <select
+                        value={filters?.position || ''}
+                        onChange={(e) => handleFilterChange('position', e.target.value)}
+                        className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                    >
+                        <option value="">All Positions</option>
+                        {(positions || []).map((pos) => (
+                            <option key={pos} value={pos}>{pos}</option>
+                        ))}
+                    </select>
+                    <select
+                        value={filters?.role || ''}
+                        onChange={(e) => handleFilterChange('role', e.target.value)}
+                        className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm"
+                    >
+                        <option value="">All Roles</option>
+                        <option value="super_admin">{getRoleLabel('super_admin')}</option>
+                        <option value="admin">{getRoleLabel('admin')}</option>
+                        <option value="manager">{getRoleLabel('manager')}</option>
+                        <option value="employee">{getRoleLabel('employee')}</option>
                     </select>
                     <select
                         value={filters?.leave_type_id || ''}
@@ -92,6 +122,8 @@ export default function LeaveReport({ leaveRequests, summary, departments, leave
                         <option value="rejected">Rejected</option>
                         <option value="cancelled">Cancelled</option>
                     </select>
+                </div>
+                <div>
                     <a
                         href={`/reports/export?type=leave&financial_year=${financialYear}`}
                         className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,6 +21,12 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
+        if (!SystemSetting::get('password_login_enabled', true)) {
+            throw ValidationException::withMessages([
+                'email' => ['Password login is disabled. Please sign in using the magic link option.'],
+            ]);
+        }
+
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required'],

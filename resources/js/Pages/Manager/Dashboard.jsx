@@ -1,9 +1,9 @@
 import { Head, Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Users, Clock, Calendar, CheckCircle } from 'lucide-react';
+import { Users, Clock, Calendar, CheckCircle, Paperclip, CalendarClock } from 'lucide-react';
 import { formatDate, getStatusColor } from '@/lib/utils';
 
-export default function ManagerDashboard({ stats, pendingRequests, todayOnLeave, teamMembers, financialYear }) {
+export default function ManagerDashboard({ stats, pendingRequests, todayOnLeave, upcomingTeamLeaves = [], teamMembers, financialYear }) {
     const statCards = [
         { name: 'Team Size', value: stats.teamSize, icon: Users, color: 'bg-blue-500' },
         { name: 'Pending Requests', value: stats.pendingRequests, icon: Clock, color: 'bg-yellow-500' },
@@ -55,8 +55,11 @@ export default function ManagerDashboard({ stats, pendingRequests, todayOnLeave,
                                             <p className="text-sm font-medium text-gray-900">
                                                 {request.employee?.user?.name}
                                             </p>
-                                            <p className="text-sm text-gray-500">
-                                                {request.leave_type?.name} - {request.total_days} day(s)
+                                            <p className="text-sm text-gray-500 flex items-center gap-1.5">
+                                                <span>{request.leave_type?.name} - {request.total_days} day(s)</span>
+                                                {request.attachment_path && (
+                                                    <Paperclip className="h-3.5 w-3.5 text-gray-400" title="Has attachment" />
+                                                )}
                                             </p>
                                             <p className="text-xs text-gray-400">
                                                 {formatDate(request.start_date)} - {formatDate(request.end_date)}
@@ -93,6 +96,43 @@ export default function ManagerDashboard({ stats, pendingRequests, todayOnLeave,
                                             </p>
                                             <p className="text-sm text-gray-500">
                                                 {leave.leave_type?.name}
+                                            </p>
+                                        </div>
+                                        <div className="text-right text-sm text-gray-500">
+                                            <p>{formatDate(leave.start_date)} - {formatDate(leave.end_date)}</p>
+                                        </div>
+                                    </div>
+                                </li>
+                            ))
+                        )}
+                    </ul>
+                </div>
+            </div>
+
+            {/* Upcoming Team Leaves */}
+            <div className="mt-8">
+                <div className="bg-white shadow rounded-lg">
+                    <div className="px-4 py-5 sm:px-6 border-b border-gray-200 flex items-center gap-2">
+                        <CalendarClock className="h-5 w-5 text-indigo-500" />
+                        <h3 className="text-lg font-medium text-gray-900">Upcoming Team Leaves</h3>
+                    </div>
+                    <ul className="divide-y divide-gray-200">
+                        {upcomingTeamLeaves.length === 0 ? (
+                            <li className="px-4 py-4 text-sm text-gray-500">No upcoming team leaves</li>
+                        ) : (
+                            upcomingTeamLeaves.map((leave) => (
+                                <li key={leave.id} className="px-4 py-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-900">
+                                                {leave.employee?.user?.name}
+                                            </p>
+                                            <p className="text-sm text-gray-500 flex items-center gap-1.5">
+                                                <span
+                                                    className="w-2 h-2 rounded-full"
+                                                    style={{ backgroundColor: leave.leave_type?.color }}
+                                                />
+                                                <span>{leave.leave_type?.name} - {leave.total_days} day(s)</span>
                                             </p>
                                         </div>
                                         <div className="text-right text-sm text-gray-500">

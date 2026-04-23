@@ -34,6 +34,35 @@ class LeaveBalanceService
         }
     }
 
+    public function initializeBalancesForLeaveType(LeaveType $leaveType, ?string $financialYear = null): int
+    {
+        $financialYear = $financialYear ?? SystemSetting::getFinancialYear();
+        $employees = Employee::active()->get();
+        $count = 0;
+
+        foreach ($employees as $employee) {
+            $entitledDays = $leaveType->getAllowanceForEmployeeType($employee->employee_type_id);
+
+            EmployeeLeaveBalance::firstOrCreate(
+                [
+                    'employee_id' => $employee->id,
+                    'leave_type_id' => $leaveType->id,
+                    'financial_year' => $financialYear,
+                ],
+                [
+                    'entitled_days' => $entitledDays,
+                    'carried_over' => 0,
+                    'adjustment' => 0,
+                    'used_days' => 0,
+                    'pending_days' => 0,
+                ]
+            );
+            $count++;
+        }
+
+        return $count;
+    }
+
     public function initializeBalancesForAllEmployees(?string $financialYear = null): int
     {
         $financialYear = $financialYear ?? SystemSetting::getFinancialYear();

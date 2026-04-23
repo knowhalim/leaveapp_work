@@ -1,9 +1,11 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Mail, Send, Users, AlertCircle, CheckCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function MassEmail({ departments, employeeTypes, roles, positions }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const [preview, setPreview] = useState(null);
     const [loading, setLoading] = useState(false);
     const [sendStatus, setSendStatus] = useState(null);
@@ -108,7 +110,7 @@ export default function MassEmail({ departments, employeeTypes, roles, positions
                 const type = employeeTypes.find(t => t.id == data.employee_type_id);
                 return type ? `Employee Type: ${type.name}` : 'Select an employee type';
             case 'role':
-                return data.role ? `Role: ${data.role.replace('_', ' ')}` : 'Select a role';
+                return data.role ? `Role: ${getRoleLabel(data.role)}` : 'Select a role';
             case 'position':
                 return data.position ? `Position: ${data.position}` : 'Select a position';
             default:
@@ -240,7 +242,7 @@ export default function MassEmail({ departments, employeeTypes, roles, positions
                                         <option value="">Select Role</option>
                                         {roles.map((role) => (
                                             <option key={role} value={role}>
-                                                {role.replace('_', ' ')}
+                                                {getRoleLabel(role)}
                                             </option>
                                         ))}
                                     </select>

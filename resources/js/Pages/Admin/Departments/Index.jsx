@@ -1,8 +1,10 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Plus, Edit, Trash2, Eye, Users, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export default function DepartmentsIndex({ departments, filters }) {
+    const { role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const handleFilterChange = (key, value) => {
         router.get('/departments', { ...filters, [key]: value }, { preserveState: true });
     };
@@ -59,10 +61,10 @@ export default function DepartmentsIndex({ departments, filters }) {
                                 Department
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Manager
+                                {getRoleLabel('manager')}
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Employees
+                                {getRoleLabel('employee')}s
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Status
@@ -98,7 +100,7 @@ export default function DepartmentsIndex({ departments, filters }) {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {department.employees_count} employees
+                                        {department.employees_count} {getRoleLabel('employee')}s
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${department.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

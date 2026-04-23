@@ -20,6 +20,7 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'company_name' => fn () => SystemSetting::getCompanyName(),
+            'password_login_enabled' => fn () => (bool) SystemSetting::get('password_login_enabled', true),
             'role_labels' => fn () => [
                 'employee'  => SystemSetting::get('role_label_employee', 'Employee'),
                 'manager'   => SystemSetting::get('role_label_manager', 'Manager'),

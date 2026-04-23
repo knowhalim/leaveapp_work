@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Head, useForm, usePage, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Settings, Calendar, Building2, Mail, Save, Database, Key, Plus, Trash2, Copy, Check, Clock, BookOpen, X, ChevronDown, ChevronRight, Lock, Zap } from 'lucide-react';
+import { Settings, Calendar, Building2, Mail, MailOpen, Save, Database, Key, Plus, Trash2, Copy, Check, Clock, BookOpen, X, ChevronDown, ChevronRight, Lock, Zap } from 'lucide-react';
 
 export default function SettingsIndex({ settings, apiTokens = [] }) {
     const { auth, flash } = usePage().props;
@@ -43,6 +43,7 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
         role_label_manager: settings.role_label_manager || 'Manager',
         role_label_admin: settings.role_label_admin || 'Admin',
         role_label_super_admin: settings.role_label_super_admin || 'Super Admin',
+        password_login_enabled: settings.password_login_enabled ?? true,
     });
 
     const weekdays = [
@@ -110,6 +111,13 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
                     >
                         <Building2 className="h-4 w-4" />
                         Employee Types
+                    </a>
+                    <a
+                        href="/settings/email-templates"
+                        className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2"
+                    >
+                        <MailOpen className="h-4 w-4" />
+                        Email Templates
                     </a>
                     {isSuperAdmin && (
                         <a
@@ -269,6 +277,38 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
                             ))}
                         </div>
                     </div>
+
+                    {/* Authentication */}
+                    {isSuperAdmin && (
+                        <div className="p-6">
+                            <h3 className="text-lg font-medium text-gray-900 mb-1 flex items-center gap-2">
+                                <Lock className="h-4 w-4 text-gray-500" />
+                                Authentication
+                            </h3>
+                            <p className="text-sm text-gray-500 mb-4">
+                                Control how users sign in. When password login is disabled, users can only sign in via magic link sent to their email.
+                            </p>
+                            <label className="flex items-start gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={data.password_login_enabled}
+                                    onChange={(e) => setData('password_login_enabled', e.target.checked)}
+                                    className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                />
+                                <div>
+                                    <span className="block text-sm font-medium text-gray-900">Enable password login</span>
+                                    <span className="block text-xs text-gray-500">
+                                        {data.password_login_enabled
+                                            ? 'Users can sign in with a password or a magic link.'
+                                            : 'Passwordless mode — users sign in only via magic link. Welcome emails will not include a temporary password.'}
+                                    </span>
+                                </div>
+                            </label>
+                            {errors.password_login_enabled && (
+                                <p className="mt-1 text-sm text-red-600">{errors.password_login_enabled}</p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Submit Button */}
                     <div className="p-6 bg-gray-50 rounded-b-lg flex items-center justify-between">

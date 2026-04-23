@@ -109,6 +109,14 @@ class DashboardController extends Controller
             ->where('end_date', '>=', today())
             ->get();
 
+        $upcomingTeamLeaves = LeaveRequest::with(['employee.user', 'leaveType'])
+            ->whereIn('employee_id', $teamMemberIds)
+            ->approved()
+            ->where('start_date', '>', today())
+            ->orderBy('start_date')
+            ->take(10)
+            ->get();
+
         $stats = [
             'teamSize' => $teamMembers->count(),
             'pendingRequests' => $pendingRequests->count(),
@@ -119,6 +127,7 @@ class DashboardController extends Controller
             'stats' => $stats,
             'pendingRequests' => $pendingRequests,
             'todayOnLeave' => $todayOnLeave,
+            'upcomingTeamLeaves' => $upcomingTeamLeaves,
             'teamMembers' => $teamMembers,
             'financialYear' => $financialYear,
         ]);

@@ -16,10 +16,11 @@ class DepartmentSeeder extends Seeder
             ['name' => 'Marketing', 'is_active' => true],
             ['name' => 'Operations', 'is_active' => true],
             ['name' => 'Sales', 'is_active' => true],
+            ['name' => 'Innovation', 'is_active' => true],
         ];
 
         foreach ($departments as $department) {
-            Department::create($department);
+            Department::firstOrCreate(['name' => $department['name']], $department);
         }
     }
 }

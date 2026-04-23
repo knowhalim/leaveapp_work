@@ -4,7 +4,8 @@ import { Users, Calendar, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function BulkAdjustment({ roles, positions, leaveTypes, departments, employeeTypes, financialYear }) {
-    const { flash } = usePage().props;
+    const { flash, role_labels } = usePage().props;
+    const getRoleLabel = (role) => role_labels?.[role] || role?.replace('_', ' ');
     const [preview, setPreview] = useState(null);
     const [loading, setLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -216,7 +217,7 @@ export default function BulkAdjustment({ roles, positions, leaveTypes, departmen
                                             <option value="">All Roles</option>
                                             {roles.map((role) => (
                                                 <option key={role} value={role}>
-                                                    {role.replace('_', ' ')}
+                                                    {getRoleLabel(role)}
                                                 </option>
                                             ))}
                                         </select>

@@ -50,10 +50,30 @@ export default function LeaveTypeShow({ leaveType }) {
                                 </dd>
                             </div>
                             <div>
-                                <dt className="text-sm font-medium text-gray-500">Requires Attachment</dt>
+                                <dt className="text-sm font-medium text-gray-500">Attachment</dt>
                                 <dd className="mt-1">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${leaveType.requires_attachment ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}`}>
-                                        {leaveType.requires_attachment ? 'Yes' : 'No'}
+                                    {leaveType.requires_attachment ? (
+                                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">Required</span>
+                                    ) : (leaveType.allow_attachment ? (
+                                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">Optional</span>
+                                    ) : (
+                                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">Not allowed</span>
+                                    ))}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-sm font-medium text-gray-500">Show at 0 balance</dt>
+                                <dd className="mt-1">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${leaveType.show_at_zero_balance ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                        {leaveType.show_at_zero_balance ? 'Yes' : 'No'}
+                                    </span>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt className="text-sm font-medium text-gray-500">Hide balance in dropdown</dt>
+                                <dd className="mt-1">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${leaveType.hide_balance ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                        {leaveType.hide_balance ? 'Yes' : 'No'}
                                     </span>
                                 </dd>
                             </div>

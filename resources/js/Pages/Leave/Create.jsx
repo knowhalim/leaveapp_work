@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { AlertTriangle } from 'lucide-react';
 
 export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, financialYear, employees, selfEmployeeId }) {
     const isOnBehalf = employees && employees.length > 0;
     const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
     const [leaveBalances, setLeaveBalances] = useState(selfBalances);
 
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, setError, clearErrors } = useForm({
         leave_type_id: '',
         start_date: '',
         end_date: '',
@@ -33,6 +34,12 @@ export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, f
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        const type = leaveTypes.find(t => t.id === parseInt(data.leave_type_id));
+        if (type?.requires_attachment && !data.attachment) {
+            setError('attachment', 'An attachment is required for this leave type.');
+            return;
+        }
+        clearErrors('attachment');
         post('/leaves');
     };
 
@@ -45,6 +52,15 @@ export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, f
         : today;
 
     const isSingleDay = data.start_date && data.end_date && data.start_date === data.end_date;
+
+    // Client-side weekend check to warn user before submission
+    const isWeekend = (dateStr) => {
+        const day = new Date(dateStr + 'T00:00:00').getDay(); // 0=Sun, 6=Sat
+        return day === 0 || day === 6;
+    };
+    const startIsWeekend = data.start_date && isWeekend(data.start_date);
+    const endIsWeekend = data.end_date && isWeekend(data.end_date);
+    const nonWorkingDayWarning = isSingleDay && startIsWeekend;
 
     // When switching between single/multi day, reset halves to sensible defaults
     const handleStartDateChange = (val) => {
@@ -125,8 +141,10 @@ export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, f
                                 {leaveTypes
                                     .filter((type) => {
                                         const bal = leaveBalances.find(b => b.leave_type_id === type.id);
-                                        // Hide if a balance record exists and available is 0 or less
-                                        if (!bal) return true; // no balance record = unlimited (e.g. Unpaid Leave)
+                                        // No balance record = unlimited (e.g. Unpaid Leave)
+                                        if (!bal) return true;
+                                        // Admin override: always show in dropdown
+                                        if (type.show_at_zero_balance) return true;
                                         const available = bal.entitled_days + bal.carried_over + bal.adjustment - bal.used_days - bal.pending_days;
                                         return available > 0;
                                     })
@@ -135,7 +153,7 @@ export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, f
                                         const available = bal
                                             ? bal.entitled_days + bal.carried_over + bal.adjustment - bal.used_days - bal.pending_days
                                             : null;
-                                        const label = available !== null
+                                        const label = (available !== null && !type.hide_balance)
                                             ? `${type.name} (${available} day${available !== 1 ? 's' : ''} left)`
                                             : type.name;
                                         return (
@@ -254,13 +272,14 @@ export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, f
                         </div>
 
                         {/* Attachment */}
-                        {selectedLeaveType?.requires_attachment && (
+                        {(selectedLeaveType?.requires_attachment || selectedLeaveType?.allow_attachment) && (
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">
-                                    Attachment (Required)
+                                    Attachment {selectedLeaveType?.requires_attachment ? '(Required)' : '(Optional)'}
                                 </label>
                                 <input
                                     type="file"
+                                    required={selectedLeaveType?.requires_attachment}
                                     onChange={(e) => setData('attachment', e.target.files[0])}
                                     className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                                 />
@@ -270,6 +289,13 @@ export default function LeaveCreate({ leaveTypes, leaveBalances: selfBalances, f
                             </div>
                         )}
                     </div>
+
+                    {nonWorkingDayWarning && (
+                        <div className="mx-6 mb-2 flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                            The selected date falls on a weekend. This leave request will be rejected.
+                        </div>
+                    )}
 
                     <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
                         <a
