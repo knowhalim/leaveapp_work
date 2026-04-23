@@ -288,7 +288,7 @@ class EmailService
     {
         $leaveRequest->load(['employee.user', 'employee.supervisors.user', 'employee.department', 'leaveType']);
         $employeeUser = $leaveRequest->employee->user;
-        $daysPending = $leaveRequest->created_at->diffInDays(now());
+        $daysPending = (int) floor($leaveRequest->created_at->diffInDays(now()));
 
         $notifiedIds = [];
 
@@ -317,7 +317,7 @@ class EmailService
     public function sendPendingLeaveAdminEscalation(LeaveRequest $leaveRequest): void
     {
         $leaveRequest->load(['employee.user', 'leaveType']);
-        $daysPending = $leaveRequest->created_at->diffInDays(now());
+        $daysPending = (int) floor($leaveRequest->created_at->diffInDays(now()));
 
         $admins = User::where('is_active', true)
             ->whereIn('role', ['admin', 'super_admin'])
