@@ -68,7 +68,7 @@ export default function EmployeeTypes({ employeeTypes }) {
 
             {/* Navigation Tabs */}
             <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8">
+                <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto">
                     <a
                         href="/settings"
                         className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2"
@@ -119,7 +119,7 @@ export default function EmployeeTypes({ employeeTypes }) {
             </div>
 
             {/* Header with Add Button */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
                 <p className="text-sm text-gray-500">
                     Manage employee types to categorize employees and set leave allowances.
                 </p>

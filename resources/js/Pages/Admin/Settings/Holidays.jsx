@@ -66,7 +66,7 @@ export default function Holidays({ holidays }) {
 
             {/* Navigation Tabs */}
             <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8">
+                <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto">
                     <a
                         href="/settings"
                         className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2"
@@ -117,7 +117,7 @@ export default function Holidays({ holidays }) {
             </div>
 
             {/* Header with Add Button */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
                 <p className="text-sm text-gray-500">
                     Manage public holidays that will be excluded from leave calculations.
                 </p>
@@ -131,7 +131,7 @@ export default function Holidays({ holidays }) {
             </div>
 
             {/* Holidays Table */}
-            <div className="bg-white shadow rounded-lg overflow-hidden">
+            <div className="bg-white shadow rounded-lg overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                         <tr>

@@ -116,7 +116,7 @@ export default function ScheduledTasks({ settings, backups = [] }) {
 
             {/* Navigation Tabs */}
             <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8 overflow-x-auto">
+                <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto">
                     <a
                         href="/settings"
                         className="border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2"
@@ -748,12 +748,12 @@ export default function ScheduledTasks({ settings, backups = [] }) {
                                 ) : (
                                     <div className="space-y-2">
                                         {backups.map((backup) => (
-                                            <div key={backup.name} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-900 font-mono">{backup.name}</p>
+                                            <div key={backup.name} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-gray-900 font-mono break-all">{backup.name}</p>
                                                     <p className="text-xs text-gray-500 mt-0.5">{backup.size} · {backup.created_at}</p>
                                                 </div>
-                                                <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+                                                <div className="flex items-center gap-2 flex-shrink-0 sm:ml-4 flex-wrap">
                                                     <a
                                                         href={`/settings/backups/${backup.name}`}
                                                         className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-indigo-700 border border-indigo-200 rounded-md hover:bg-indigo-50"
@@ -813,16 +813,16 @@ export default function ScheduledTasks({ settings, backups = [] }) {
                                     ) : (
                                         <div className="space-y-2">
                                             {driveBackups.map((backup) => (
-                                                <div key={backup.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
-                                                    <div>
-                                                        <p className="text-sm font-medium text-gray-900 font-mono">{backup.name}</p>
+                                                <div key={backup.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-medium text-gray-900 font-mono break-all">{backup.name}</p>
                                                         <p className="text-xs text-gray-500 mt-0.5">{backup.size} · {new Date(backup.created_at).toLocaleString()}</p>
                                                     </div>
                                                     <button
                                                         type="button"
                                                         disabled={restoring}
                                                         onClick={() => handleRestore('google', backup.id, backup.name)}
-                                                        className="flex-shrink-0 ml-4 inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-orange-700 border border-orange-200 rounded-md hover:bg-orange-50 disabled:opacity-50"
+                                                        className="flex-shrink-0 sm:ml-4 inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-orange-700 border border-orange-200 rounded-md hover:bg-orange-50 disabled:opacity-50"
                                                     >
                                                         <RefreshCw className={`h-3.5 w-3.5 ${restoring ? 'animate-spin' : ''}`} />
                                                         Restore

@@ -90,7 +90,7 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
 
             {/* Navigation Tabs */}
             <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8">
+                <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto">
                     <a
                         href="/settings"
                         className="border-indigo-500 text-indigo-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2"
@@ -311,7 +311,7 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
                     )}
 
                     {/* Submit Button */}
-                    <div className="p-6 bg-gray-50 rounded-b-lg flex items-center justify-between">
+                    <div className="p-6 bg-gray-50 rounded-b-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <button
                             type="submit"
                             disabled={processing}
@@ -377,7 +377,7 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
                                 </div>
                             )}
 
-                            <form onSubmit={handleGenerateToken} className="flex gap-2 mb-6">
+                            <form onSubmit={handleGenerateToken} className="flex flex-col sm:flex-row gap-2 mb-6">
                                 <input
                                     type="text"
                                     value={newTokenName}
@@ -398,6 +398,7 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
                             {apiTokens.length === 0 ? (
                                 <p className="text-sm text-gray-500">No API tokens yet.</p>
                             ) : (
+                                <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                                     <thead>
                                         <tr>
@@ -427,10 +428,11 @@ export default function SettingsIndex({ settings, apiTokens = [] }) {
                                         ))}
                                     </tbody>
                                 </table>
+                                </div>
                             )}
 
                             {/* Endpoint summary table */}
-                            <div className="mt-6 rounded-lg border border-gray-200 overflow-hidden">
+                            <div className="mt-6 rounded-lg border border-gray-200 overflow-x-auto">
                                 <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
                                     <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Available Endpoints</span>
                                     <button
