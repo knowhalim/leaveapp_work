@@ -542,7 +542,12 @@ class ReportController extends Controller
         $days  = $req->total_days;
 
         if ($start->equalTo($end)) {
-            // Single day — no day count suffix
+            // Single day — annotate only fractional (half) days so 0.5-day
+            // entries are visible; full days stay bare (e.g. "23-Jul-26").
+            if (fmod((float) $days, 1.0) !== 0.0) {
+                return $start->format('d-M-y') . " ({$days} day)";
+            }
+
             return $start->format('d-M-y');
         }
 

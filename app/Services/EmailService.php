@@ -316,8 +316,24 @@ class EmailService
 
     public function sendPendingLeaveAdminEscalation(LeaveRequest $leaveRequest): void
     {
-        $leaveRequest->load(['employee.user', 'leaveType']);
+        $leaveRequest->load(['employee.user', 'employee.supervisors.user', 'employee.department.manager', 'leaveType']);
         $daysPending = (int) floor($leaveRequest->created_at->diffInDays(now()));
+
+        // Same recipients the supervisor reminder went to, so admins know who to chase
+        $approvers = collect();
+
+        foreach ($leaveRequest->employee->supervisors as $supervisor) {
+            if ($supervisor->user) {
+                $approvers->push($supervisor->user);
+            }
+        }
+
+        $dept = $leaveRequest->employee->department;
+        if ($dept && $dept->manager) {
+            $approvers->push($dept->manager);
+        }
+
+        $approvers = $approvers->unique('id')->values();
 
         $admins = User::where('is_active', true)
             ->whereIn('role', ['admin', 'super_admin'])
@@ -328,7 +344,12 @@ class EmailService
                 $admin->email,
                 'Action Required: Leave Request Has Not Been Approved',
                 'emails.leave.admin-escalation',
-                ['leaveRequest' => $leaveRequest, 'admin' => $admin, 'daysPending' => $daysPending]
+                [
+                    'leaveRequest' => $leaveRequest,
+                    'admin' => $admin,
+                    'daysPending' => $daysPending,
+                    'approvers' => $approvers,
+                ]
             );
         }
     }

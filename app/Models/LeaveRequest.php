@@ -26,6 +26,8 @@ class LeaveRequest extends Model
         'approval_notes',
         'attachment_path',
         'financial_year',
+        'reminder_sent_at',
+        'admin_notified_at',
     ];
 
     protected function casts(): array
@@ -34,6 +36,8 @@ class LeaveRequest extends Model
             'start_date' => 'date',
             'end_date' => 'date',
             'approved_at' => 'datetime',
+            'reminder_sent_at' => 'datetime',
+            'admin_notified_at' => 'datetime',
             'total_days' => 'float',
         ];
     }

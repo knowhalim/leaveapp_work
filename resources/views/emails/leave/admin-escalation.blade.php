@@ -19,6 +19,16 @@
                 <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{{ $leaveRequest->employee->user->name }}</td>
             </tr>
             <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: bold; vertical-align: top;">Approver:</td>
+                <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
+                    @forelse($approvers ?? [] as $approver)
+                        <span style="white-space: nowrap;">{{ $approver->name }} ({{ $approver->email }})</span>@if(!$loop->last)<br>@endif
+                    @empty
+                        <span style="color: #dc2626;">No supervisor or department manager assigned</span>
+                    @endforelse
+                </td>
+            </tr>
+            <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; font-weight: bold;">Leave Type:</td>
                 <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">{{ $leaveRequest->leaveType->name }}</td>
             </tr>
