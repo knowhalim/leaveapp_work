@@ -67,3 +67,11 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'role:super_admin'])->group(fun
     Route::get('/users/{email}/balances', [UserApiController::class, 'balances']);
     Route::post('/users/{email}/leaves',  [UserApiController::class, 'applyLeave']);
 });
+
+// ─── MCP server (admin / super_admin only) ───────────────────────────────────
+//     JSON-RPC 2.0 over HTTP. The .mcpb bundle's bundled stdio server is a
+//     pipe onto this endpoint; tools, permissions and results are defined once,
+//     in app/Mcp, and never duplicated client-side.
+Route::post('/mcp', [\App\Http\Controllers\Mcp\McpController::class, 'handle'])
+    ->middleware(['mcp.auth'])
+    ->name('mcp.handle');

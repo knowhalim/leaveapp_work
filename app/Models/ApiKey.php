@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
 class ApiKey extends Model
@@ -11,6 +12,7 @@ class ApiKey extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'name',
         'key',
         'permissions',
@@ -31,6 +33,15 @@ class ApiKey extends Model
             'expires_at' => 'datetime',
             'last_used_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The user this key acts as. Null for legacy keys minted before keys
+     * carried an identity; those are refused by the MCP transport.
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     public static function generateKey(): string

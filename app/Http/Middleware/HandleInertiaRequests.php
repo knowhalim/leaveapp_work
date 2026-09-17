@@ -44,6 +44,7 @@ class HandleInertiaRequests extends Middleware
                 'import_success_count' => fn () => $request->session()->get('import_success_count'),
                 'magic_link_sent' => fn () => $request->session()->get('magic_link_sent'),
                 'api_token' => fn () => $request->session()->get('api_token'),
+                'mcp_key' => fn () => $request->session()->get('mcp_key'),
             ],
         ];
     }

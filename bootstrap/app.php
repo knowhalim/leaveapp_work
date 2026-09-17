@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role'     => \App\Http\Middleware\RoleMiddleware::class,
             'active'   => \App\Http\Middleware\EnsureUserIsActive::class,
             'api.auth' => \App\Http\Middleware\ApiAuthMiddleware::class,
+            'mcp.auth' => \App\Http\Middleware\McpAuthMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

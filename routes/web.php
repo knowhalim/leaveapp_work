@@ -203,6 +203,13 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::post('/backups/restore', [SettingsController::class, 'restore'])->name('backups.restore');
             Route::get('/google-drive/connect', [GoogleDriveController::class, 'redirect'])->name('google-drive.connect');
             Route::delete('/google-drive/disconnect', [GoogleDriveController::class, 'disconnect'])->name('google-drive.disconnect');
+            // MCP server: connection name, keys, and the baked .mcpb bundle.
+            Route::get('/mcp', [\App\Http\Controllers\Mcp\McpSettingsController::class, 'index'])->name('mcp');
+            Route::post('/mcp/connector', [\App\Http\Controllers\Mcp\McpSettingsController::class, 'updateConnector'])->name('mcp.connector');
+            Route::post('/mcp/keys', [\App\Http\Controllers\Mcp\McpSettingsController::class, 'generateKey'])->name('mcp.keys.generate');
+            Route::delete('/mcp/keys/{apiKey}', [\App\Http\Controllers\Mcp\McpSettingsController::class, 'revokeKey'])->name('mcp.keys.revoke');
+            Route::get('/mcp/bundle', [\App\Http\Controllers\Mcp\McpSettingsController::class, 'downloadBundle'])->name('mcp.bundle');
+
             Route::get('/google-drive-tutorial', function () {
                 return view('settings.google-drive-tutorial');
             })->name('google-drive-tutorial');
