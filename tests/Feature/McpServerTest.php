@@ -187,6 +187,43 @@ final class McpServerTest extends TestCase
     }
 
     /**
+     * The version is the bundle's identity for upgrade detection, so it must
+     * be stable between calls and must not come from a source that can go
+     * stale — servers carry a .git from an old clone that rsync never updates.
+     */
+    public function test_the_version_is_stable_and_not_read_from_git(): void
+    {
+        \App\Mcp\McpVersion::flush();
+        $first = \App\Mcp\McpVersion::current();
+
+        \App\Mcp\McpVersion::flush();
+        $this->assertSame($first, \App\Mcp\McpVersion::current());
+
+        $this->assertMatchesRegularExpression('/^\d+\.\d+\.\d+\+[0-9a-f]{8}$/', $first);
+
+        // The old implementation returned the HEAD commit; if a .git exists in
+        // this checkout, prove the version is not simply that.
+        $head = base_path('.git/HEAD');
+        if (file_exists($head)) {
+            $this->assertStringNotContainsString(
+                substr(trim((string) @file_get_contents($head)), 0, 7),
+                $first
+            );
+        }
+    }
+
+    public function test_an_explicit_version_overrides_the_derived_one(): void
+    {
+        config(['mcp.version' => '2.5.0']);
+        \App\Mcp\McpVersion::flush();
+
+        $this->assertSame('2.5.0', \App\Mcp\McpVersion::current());
+
+        config(['mcp.version' => null]);
+        \App\Mcp\McpVersion::flush();
+    }
+
+    /**
      * Create $count approved single-day leave requests in the current year.
      */
     private function seedLeave(int $count): void

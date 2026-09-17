@@ -9,18 +9,22 @@ use Illuminate\Support\Facades\File;
 /**
  * The version string stamped into bundles, manifests and serverInfo.
  *
- * This app carries no version of its own — no `version` in package.json, none
- * in config/app.php — so rather than inventing a constant that nobody will
- * remember to bump, the version is derived: `mcp.version` if an operator sets
- * one, else the deployed commit, else a stable fallback.
+ * A client treats the manifest version as the bundle's identity: same version
+ * means same bundle, so it will not offer an upgrade. That makes a *stale*
+ * version worse than a crude one.
  *
- * It matters because a client treats the manifest version as the bundle's
- * identity for upgrades. Two different toolsets sharing a version number is
- * the failure this avoids.
+ * This deliberately does not read git. The deploy rsync excludes `.git`, but
+ * servers provisioned by an earlier clone still have one — so reading it
+ * reported a commit from months before the deployed code, identically on every
+ * server, forever. Instead the version is derived from the MCP surface that
+ * actually ships: the tool names, their descriptions and the stdio bridge.
+ * It changes when and only when the thing a client cares about changes.
+ *
+ * Operators who want to control the number set MCP_VERSION.
  */
 final class McpVersion
 {
-    private const FALLBACK = '1.0.0';
+    private const BASE = '1.0.0';
 
     private static ?string $cached = null;
 
@@ -36,43 +40,40 @@ final class McpVersion
             return self::$cached = trim($configured);
         }
 
-        return self::$cached = self::FALLBACK . '+' . self::commit();
+        return self::$cached = self::BASE . '+' . self::surfaceHash();
     }
 
     /**
-     * Short commit of the deployed tree, or 'unknown'.
-     *
-     * Read from .git directly rather than shelling out to git: the deploy
-     * rsync excludes .git, so on a server this is expected to miss, and
-     * spawning a process to discover that on every manifest build is waste.
+     * Forget the memoised value. For tests that change the tool set.
      */
-    private static function commit(): string
+    public static function flush(): void
     {
-        $head = base_path('.git/HEAD');
+        self::$cached = null;
+    }
 
-        if (!File::exists($head)) {
-            return 'unknown';
+    /**
+     * A short hash over everything a client would notice changing.
+     *
+     * Tool names and descriptions because they are what the model reads, and
+     * the bridge script because a fix there needs clients to reinstall. Input
+     * schemas are deliberately excluded: they are delivered live over
+     * `tools/list`, so a schema tweak needs no new bundle.
+     */
+    private static function surfaceHash(): string
+    {
+        $parts = [];
+
+        foreach (app(ToolRegistry::class)->all() as $tool) {
+            $parts[] = $tool->name() . "\0" . $tool->description();
         }
 
-        $contents = trim((string) File::get($head));
+        sort($parts);
 
-        if (str_starts_with($contents, 'ref: ')) {
-            $ref  = substr($contents, 5);
-            $path = base_path('.git/' . $ref);
-
-            if (File::exists($path)) {
-                return substr(trim((string) File::get($path)), 0, 7);
-            }
-
-            // Packed refs: the loose file is absent once git has packed it.
-            $packed = base_path('.git/packed-refs');
-            if (File::exists($packed) && preg_match('/^([0-9a-f]{40})\s+' . preg_quote($ref, '/') . '$/m', (string) File::get($packed), $m)) {
-                return substr($m[1], 0, 7);
-            }
-
-            return 'unknown';
+        $bridge = resource_path('mcpb/server/index.js');
+        if (File::exists($bridge)) {
+            $parts[] = hash('sha256', (string) File::get($bridge));
         }
 
-        return preg_match('/^[0-9a-f]{40}$/', $contents) ? substr($contents, 0, 7) : 'unknown';
+        return substr(hash('sha256', implode("\n", $parts)), 0, 8);
     }
 }
