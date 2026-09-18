@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Mcp;
 
+use App\Models\ApiKey;
 use App\Models\User;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
@@ -52,14 +53,19 @@ final class McpbBuilder
         return storage_path('app/mcpb');
     }
 
-    public function filename(): string
+    public function filename(?ApiKey $bakedKey = null): string
     {
-        return ConnectorName::get() . '.mcpb';
+        // A bundle carrying a live credential says so in its own name. These
+        // files end up in Downloads folders and get forwarded; the one moment
+        // somebody might notice is when they read the filename.
+        $suffix = $bakedKey instanceof ApiKey ? '-with-key' : '';
+
+        return ConnectorName::get() . $suffix . '.mcpb';
     }
 
-    public function path(): string
+    public function path(?ApiKey $bakedKey = null): string
     {
-        return $this->outputDirectory() . '/' . $this->filename();
+        return $this->outputDirectory() . '/' . $this->filename($bakedKey);
     }
 
     /**
@@ -68,8 +74,10 @@ final class McpbBuilder
      * $user scopes the advertised tool list to what that admin can actually
      * call, so the bundle never promises a tool the key behind it is refused.
      */
-    public function manifest(User $user): array
+    public function manifest(User $user, ?ApiKey $bakedKey = null): array
     {
+        $plainKey = $bakedKey?->getAttributes()['key'] ?? null;
+
         return [
             'manifest_version' => self::MANIFEST_VERSION,
             'name'             => ConnectorName::get(),
@@ -88,18 +96,26 @@ final class McpbBuilder
                     'args'    => ['${__dirname}/server/index.js'],
                     'env'     => [
                         'MCPB_SERVER_URL' => $this->endpoint(),
-                        'MCPB_API_KEY'    => '${user_config.api_key}',
+                        // Baked bundles carry the credential itself; otherwise
+                        // the client substitutes the sensitive user_config
+                        // field, which it keeps in the OS keychain.
+                        'MCPB_API_KEY'    => $plainKey ?? '${user_config.api_key}',
                     ],
                 ],
             ],
+            // Nothing to fill in when the key is baked. Left as an optional
+            // override so a baked bundle can still be pointed at a different
+            // key without rebuilding it.
             'user_config'      => [
                 'api_key' => [
                     'type'        => 'string',
                     'title'       => 'API Key',
-                    'description' => 'An MCP API key for your admin account. Generate one in '
-                        . rtrim((string) config('app.url'), '/') . '/settings/mcp',
+                    'description' => $plainKey !== null
+                        ? 'Already set for this bundle. Fill this in only to override the key it was built with.'
+                        : 'An MCP API key for your admin account. Generate one in '
+                            . rtrim((string) config('app.url'), '/') . '/settings/mcp',
                     'sensitive'   => true,
-                    'required'    => true,
+                    'required'    => $plainKey === null,
                 ],
             ],
             'tools'            => $this->tools($user),
@@ -114,7 +130,7 @@ final class McpbBuilder
     /**
      * Build the bundle and return its absolute path.
      */
-    public function build(User $user): string
+    public function build(User $user, ?ApiKey $bakedKey = null): string
     {
         if (!class_exists(ZipArchive::class)) {
             throw new RuntimeException('The PHP Zip extension is required to build an MCP bundle.');
@@ -123,7 +139,7 @@ final class McpbBuilder
         File::ensureDirectoryExists($this->outputDirectory());
 
         $manifest = json_encode(
-            $this->manifest($user),
+            $this->manifest($user, $bakedKey),
             JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         );
 
@@ -131,7 +147,7 @@ final class McpbBuilder
             throw new RuntimeException('Could not encode the MCP manifest.');
         }
 
-        $path = $this->path();
+        $path = $this->path($bakedKey);
         $zip  = new ZipArchive();
 
         if ($zip->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
@@ -140,7 +156,7 @@ final class McpbBuilder
 
         $zip->addFromString('manifest.json', $manifest);
         $zip->addFromString('server/index.js', $this->serverScript());
-        $zip->addFromString('README.md', $this->readme($user));
+        $zip->addFromString('README.md', $this->readme($user, $bakedKey));
         $zip->close();
 
         return $path;
@@ -197,7 +213,7 @@ final class McpbBuilder
         return $tools;
     }
 
-    private function readme(User $user): string
+    private function readme(User $user, ?ApiKey $bakedKey = null): string
     {
         $toolLines = [];
 
@@ -205,35 +221,70 @@ final class McpbBuilder
             $toolLines[] = '- `' . $tool->name() . '` — ' . $tool->description();
         }
 
-        $lines = array_merge([
-            '# ' . ConnectorName::displayName() . ' — MCP Bundle',
-            '',
-            'Connects an MCP-compatible AI client to the HR leave system for reporting.',
-            'The server address, version and connection name are baked into this bundle;',
-            'the only thing to supply on install is your API key.',
-            '',
-            '- **Connection name:** `' . ConnectorName::get() . '`',
-            '- **Endpoint:** ' . $this->endpoint(),
-            '- **Version:** ' . McpVersion::current(),
-            '- **Requires:** Node.js 18 or newer (no packages to install)',
-            '',
-            '## Setup',
-            '',
-            '1. In the leave system, go to **Settings → MCP Server** and generate an API key.',
-            '2. Install this bundle in your client and paste the key when asked.',
-            '3. The key inherits your own permissions — admin or super admin only.',
-            '',
-            '## Tools',
-            '',
-        ], $toolLines, [
+        $settingsUrl = rtrim((string) config('app.url'), '/') . '/settings/mcp';
+
+        $header = $bakedKey instanceof ApiKey
+            ? [
+                '# ' . ConnectorName::displayName() . ' — MCP Bundle (contains a key)',
+                '',
+                '> **This file contains a live API key.** Anyone who opens it can read leave',
+                '> data for the whole organisation. Treat it like a password: do not email it,',
+                '> put it in shared storage, or commit it to a repository.',
+                '',
+                'Everything is pre-filled — server address, version, connection name and the',
+                'API key. Install it and it works; there is nothing to type.',
+                '',
+                '- **Connection name:** `' . ConnectorName::get() . '`',
+                '- **Endpoint:** ' . $this->endpoint(),
+                '- **Version:** ' . McpVersion::current(),
+                '- **Key:** `' . $bakedKey->name . '`, acting as ' . ($bakedKey->user?->email ?? 'unknown'),
+                '- **Requires:** Node.js 18 or newer (no packages to install)',
+                '',
+                '## If this file leaks',
+                '',
+                'Revoke the key and the bundle stops working immediately, everywhere it is',
+                'installed — the key is checked against the server on every single request,',
+                'so there is no cached access to expire:',
+                '',
+                '1. Go to ' . $settingsUrl,
+                '2. Find the key named `' . $bakedKey->name . '` and press **Revoke**',
+                '3. Generate a replacement and download a fresh bundle',
+                '',
+                '## Tools',
+                '',
+            ]
+            : [
+                '# ' . ConnectorName::displayName() . ' — MCP Bundle',
+                '',
+                'Connects an MCP-compatible AI client to the HR leave system for reporting.',
+                'The server address, version and connection name are baked into this bundle;',
+                'the only thing to supply on install is your API key.',
+                '',
+                '- **Connection name:** `' . ConnectorName::get() . '`',
+                '- **Endpoint:** ' . $this->endpoint(),
+                '- **Version:** ' . McpVersion::current(),
+                '- **Requires:** Node.js 18 or newer (no packages to install)',
+                '',
+                '## Setup',
+                '',
+                '1. In the leave system, go to **Settings → MCP Server** and generate an API key.',
+                '2. Install this bundle in your client and paste the key when asked.',
+                '   It is exactly 64 characters — no quotes, no trailing spaces.',
+                '3. The key inherits your own permissions — admin or super admin only.',
+                '',
+                '## Tools',
+                '',
+            ];
+
+        $lines = array_merge($header, $toolLines, [
             '',
             '## Notes',
             '',
             'Report results include a `truncated` flag. When it is true you are seeing a',
             'page of rows, but the totals alongside are computed over the whole result set.',
             '',
-            'Revoke a key at any time from Settings → MCP Server; the connection stops',
-            'working immediately.',
+            'Revoke a key at any time from ' . $settingsUrl . '; the connection stops',
+            'working immediately, wherever the bundle is installed.',
             '',
             'Generated ' . now()->format('Y-m-d H:i') . '.',
         ]);

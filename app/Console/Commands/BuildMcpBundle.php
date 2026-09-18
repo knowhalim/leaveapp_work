@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Mcp\ConnectorName;
 use App\Mcp\McpbBuilder;
 use App\Mcp\McpVersion;
+use App\Models\ApiKey;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Throwable;
@@ -22,7 +23,8 @@ final class BuildMcpBundle extends Command
 {
     protected $signature = 'mcp:bundle
                             {--user= : Email of the admin to scope the tool list to (defaults to the first super admin)}
-                            {--manifest : Print the manifest instead of writing a bundle}';
+                            {--manifest : Print the manifest instead of writing a bundle}
+                            {--key= : Bake this API key (id or name) into the bundle so there is nothing to paste. The file then contains a live credential}';
 
     protected $description = 'Build the .mcpb MCP bundle for this deployment';
 
@@ -34,8 +36,25 @@ final class BuildMcpBundle extends Command
             return self::FAILURE;
         }
 
+        $bakedKey = null;
+
+        if ($this->option('key')) {
+            $bakedKey = $this->resolveKey((string) $this->option('key'));
+
+            if (!$bakedKey instanceof ApiKey) {
+                return self::FAILURE;
+            }
+        }
+
         if ($this->option('manifest')) {
-            $this->line(json_encode($builder->manifest($user), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            // The manifest is printed to a terminal and often pasted into a
+            // ticket, so a baked key is masked here even though it is written
+            // in full into the bundle itself.
+            $manifest = $builder->manifest($user, $bakedKey);
+            if ($bakedKey) {
+                $manifest['server']['mcp_config']['env']['MCPB_API_KEY'] = '<baked: ' . $bakedKey->name . '>';
+            }
+            $this->line(json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
             return self::SUCCESS;
         }
@@ -49,7 +68,7 @@ final class BuildMcpBundle extends Command
         }
 
         try {
-            $path = $builder->build($user);
+            $path = $builder->build($user, $bakedKey);
         } catch (Throwable $e) {
             $this->error('Could not build the bundle: ' . $e->getMessage());
 
@@ -65,9 +84,47 @@ final class BuildMcpBundle extends Command
             ['Scoped to', $user->email . ' (' . $user->role . ')'],
             ['Path', $path],
             ['Size', number_format(filesize($path) / 1024, 1) . ' KB'],
+            ['Baked key', $bakedKey?->name ?? 'none (client will prompt)'],
         ]);
 
+        if ($bakedKey) {
+            $this->newLine();
+            $this->warn('This file contains a live API key. Anyone who opens it can read');
+            $this->warn('organisation-wide leave data. If it leaks, revoke the key named');
+            $this->warn('"' . $bakedKey->name . '" and every copy stops working at once.');
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Find the key to bake, by id or by name.
+     */
+    private function resolveKey(string $ref): ?ApiKey
+    {
+        $key = ctype_digit($ref)
+            ? ApiKey::with('user')->find((int) $ref)
+            : ApiKey::with('user')->where('name', $ref)->first();
+
+        if (!$key) {
+            $this->error("No API key matching '{$ref}'.");
+
+            return null;
+        }
+
+        if (!$key->hasPermission('mcp.use')) {
+            $this->error("Key '{$key->name}' is not an MCP key.");
+
+            return null;
+        }
+
+        if (!$key->isValid()) {
+            $this->error("Key '{$key->name}' is revoked or expired — baking it would produce a bundle that cannot connect.");
+
+            return null;
+        }
+
+        return $key;
     }
 
     private function resolveUser(): ?User

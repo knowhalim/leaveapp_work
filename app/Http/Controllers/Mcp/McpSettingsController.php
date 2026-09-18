@@ -145,21 +145,48 @@ final class McpSettingsController extends Controller
         return back()->with('success', "Key \"{$apiKey->name}\" revoked. Any client using it stops working immediately.");
     }
 
+    /**
+     * Download the bundle, optionally with an API key baked in.
+     *
+     * Baking is opt-in per download rather than a setting: the safe bundle
+     * stays the default, and every credential-bearing file is the result of a
+     * deliberate click that gets its own audit entry.
+     */
     public function downloadBundle(Request $request): BinaryFileResponse
     {
+        $bakedKey = null;
+
+        if ($keyId = $request->query('key')) {
+            $bakedKey = ApiKey::with('user')->find($keyId);
+
+            if (!$bakedKey || !$bakedKey->hasPermission('mcp.use')) {
+                abort(404, 'That MCP key does not exist.');
+            }
+
+            // Baking a key that is already dead produces a bundle that cannot
+            // work, and the person would not find out until they installed it.
+            if (!$bakedKey->isValid()) {
+                abort(422, 'That key is revoked or expired. Generate a new one first.');
+            }
+        }
+
         try {
-            $path = $this->builder->build($request->user());
+            $path = $this->builder->build($request->user(), $bakedKey);
         } catch (Throwable $e) {
             abort(500, 'Could not build the MCP bundle: ' . $e->getMessage());
         }
 
         ActivityLog::log('settings.mcp_bundle_downloaded', null, [
-            'connector' => ConnectorName::get(),
-            'version'   => McpVersion::current(),
+            'connector'  => ConnectorName::get(),
+            'version'    => McpVersion::current(),
+            // Recorded because a downloaded credential is a thing you may need
+            // to account for later.
+            'baked_key'  => $bakedKey?->name,
+            'key_id'     => $bakedKey?->id,
         ]);
 
-        return response()->download($path, $this->builder->filename(), [
+        return response()->download($path, $this->builder->filename($bakedKey), [
             'Content-Type' => 'application/zip',
-        ]);
+        ])->deleteFileAfterSend((bool) $bakedKey);
     }
 }

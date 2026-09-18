@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import {
     Plug, Download, KeyRound, Copy, Check, Trash2, AlertCircle,
-    ShieldCheck, Terminal, Save, Wrench,
+    ShieldCheck, Terminal, Save, Wrench, ShieldAlert,
 } from 'lucide-react';
 
 /**
@@ -168,6 +168,10 @@ export default function McpSettings({ connector, endpoint, version, app_url_warn
                     >
                         <Download className="w-4 h-4" /> Download {connector.filename}
                     </a>
+                    <p className="text-xs text-gray-500 mt-3">
+                        To skip pasting the key entirely, use <strong>Download with key</strong> next to a key below.
+                        That file contains a live credential — see the warning there.
+                    </p>
                 </section>
 
                 {/* API keys */}
@@ -177,6 +181,17 @@ export default function McpSettings({ connector, endpoint, version, app_url_warn
                         A key acts as the account that created it and inherits its permissions exactly. Create one key
                         per person or per machine, so revoking one does not cut off everyone else.
                     </p>
+
+                    <div className="flex gap-3 p-3 mb-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-xs text-amber-800">
+                            <strong>Download with key</strong> builds a bundle with the credential inside, so there is
+                            nothing to paste and nothing to mistype. The file then reads organisation-wide leave data
+                            for anyone who opens it — don't email it or put it in shared storage.
+                            If one leaks, <strong>Revoke</strong> kills it everywhere immediately: the key is checked on
+                            every request, so there is no cached access to wait out.
+                        </div>
+                    </div>
 
                     <form onSubmit={submitKey} className="flex flex-col sm:flex-row gap-2 mb-5">
                         <input
@@ -235,13 +250,24 @@ export default function McpSettings({ connector, endpoint, version, app_url_warn
                                             </td>
                                             <td className="py-3 px-3 text-gray-500 whitespace-nowrap">{key.last_used_at || 'never'}</td>
                                             <td className="py-3 px-3 text-gray-500 whitespace-nowrap">{key.expires_at || '—'}</td>
-                                            <td className="py-3 px-3 text-right">
-                                                <button
-                                                    onClick={() => revoke(key)}
-                                                    className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 text-xs"
-                                                >
-                                                    <Trash2 className="w-3.5 h-3.5" /> Revoke
-                                                </button>
+                                            <td className="py-3 px-3">
+                                                <div className="flex items-center justify-end gap-3">
+                                                    {key.is_active && (
+                                                        <a
+                                                            href={`/settings/mcp/bundle?key=${key.id}`}
+                                                            title="Bundle with this key baked in — contains a live credential"
+                                                            className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700 text-xs whitespace-nowrap"
+                                                        >
+                                                            <Download className="w-3.5 h-3.5" /> Download with key
+                                                        </a>
+                                                    )}
+                                                    <button
+                                                        onClick={() => revoke(key)}
+                                                        className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 text-xs"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" /> Revoke
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -286,8 +312,9 @@ export default function McpSettings({ connector, endpoint, version, app_url_warn
                         For generating a bundle during deployment, or checking what one would contain.
                     </p>
                     <pre className="p-3 bg-gray-900 text-gray-100 rounded-lg text-xs overflow-x-auto">
-{`php artisan mcp:bundle              # write the .mcpb
-php artisan mcp:bundle --manifest   # print the manifest instead`}
+{`php artisan mcp:bundle                    # write the .mcpb
+php artisan mcp:bundle --manifest         # print the manifest instead
+php artisan mcp:bundle --key=HalimAgent   # bake a key in (contains a credential)`}
                     </pre>
                 </section>
             </div>
