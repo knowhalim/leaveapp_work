@@ -178,12 +178,21 @@ fi
 # composer and npm grind away, and again at the end, because artisan commands in
 # step 3/4 run as root and leave root-owned caches behind.
 restore_web_permissions() {
+    # Nothing here is world-readable. Both nginx workers and php-fpm run as
+    # www-data, so owner+group is all the app ever needs — and these paths hold
+    # the live database, nightly dumps of the whole HR record, and .env.
+    #
+    # u=rwX,g=rwX,o= rather than a numeric mode: the capital X adds execute to
+    # directories only, so folders stay traversable without marking every zip
+    # and sqlite file executable, which is what the old -R 775 did.
     remote "set -e; cd ${REMOTE_PATH}; \
         mkdir -p storage/app/backups/pre-bulk-adjust ${REMOTE_BACKUP_DIR}; \
         chown www-data:www-data database/database.sqlite 2>/dev/null || true; \
-        chmod 664 database/database.sqlite 2>/dev/null || true; \
-        chown www-data:www-data database; chmod 775 database; \
-        chown -R www-data:www-data storage bootstrap/cache; chmod -R 775 storage bootstrap/cache"
+        chmod 660 database/database.sqlite 2>/dev/null || true; \
+        chown www-data:www-data database; chmod 770 database; \
+        chown -R www-data:www-data storage bootstrap/cache; \
+        chmod -R u=rwX,g=rwX,o= storage bootstrap/cache; \
+        chgrp www-data .env 2>/dev/null || true; chmod 640 .env 2>/dev/null || true"
 }
 
 echo -e "${BLUE}[2/5]${NC} Uploading changed files..."
