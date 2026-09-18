@@ -173,6 +173,19 @@ else
 fi
 
 # Step 2: rsync
+# Hand the web user back everything it needs to write. Defined once because it
+# runs twice: immediately after rsync, so the app is never left read-only while
+# composer and npm grind away, and again at the end, because artisan commands in
+# step 3/4 run as root and leave root-owned caches behind.
+restore_web_permissions() {
+    remote "set -e; cd ${REMOTE_PATH}; \
+        mkdir -p storage/app/backups/pre-bulk-adjust ${REMOTE_BACKUP_DIR}; \
+        chown www-data:www-data database/database.sqlite 2>/dev/null || true; \
+        chmod 664 database/database.sqlite 2>/dev/null || true; \
+        chown www-data:www-data database; chmod 775 database; \
+        chown -R www-data:www-data storage bootstrap/cache; chmod -R 775 storage bootstrap/cache"
+}
+
 echo -e "${BLUE}[2/5]${NC} Uploading changed files..."
 RSYNC_EXCLUDES=(
     --exclude='.git' --exclude='.DS_Store' --exclude='node_modules' --exclude='vendor'
@@ -189,17 +202,25 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Staging needs sudo to write into www-data-owned tree, so reclaim ownership first
+# --no-owner --no-group: rsync runs as root on the far side, so without these it
+# stamps the *local* machine's uid onto every file it touches, which is why the
+# app tree ends up owned by a uid that does not exist on the server. Preserving
+# existing ownership also removes the need to take the tree away from www-data
+# before syncing: root can already write into it.
 if (( NEEDS_SUDO )); then
-    remote "chown -R ${USER}:${USER} ${REMOTE_PATH}"
-    rsync -az "${RSYNC_EXCLUDES[@]}" --rsync-path="sudo rsync" \
+    rsync -az --no-owner --no-group "${RSYNC_EXCLUDES[@]}" --rsync-path="sudo rsync" \
         -e "$RSYNC_SSH" \
         "${SCRIPT_DIR}/" "${USER}@${HOST}:${REMOTE_PATH}/"
 else
-    rsync -az "${RSYNC_EXCLUDES[@]}" \
+    rsync -az --no-owner --no-group "${RSYNC_EXCLUDES[@]}" \
         -e "$RSYNC_SSH" \
         "${SCRIPT_DIR}/" "${USER}@${HOST}:${REMOTE_PATH}/"
 fi
+
+# Close the read-only window here, not after the build. composer install and
+# npm run build take tens of seconds, and every request arriving in that gap
+# used to fail with "attempt to write a readonly database".
+restore_web_permissions
 
 # Step 3: composer + build + migrate
 echo -e "${BLUE}[3/5]${NC} Building on remote..."
@@ -213,11 +234,8 @@ echo -e "${BLUE}[4/5]${NC} Fixing caches and permissions..."
 remote "set -e; cd ${REMOTE_PATH}; \
     php artisan config:cache; \
     php artisan route:cache; \
-    php artisan view:clear; \
-    mkdir -p storage/app/backups/pre-bulk-adjust ${REMOTE_BACKUP_DIR}; \
-    chown www-data:www-data database/database.sqlite; chmod 664 database/database.sqlite; \
-    chown www-data:www-data database; chmod 775 database; \
-    chown -R www-data:www-data storage bootstrap/cache; chmod -R 775 storage bootstrap/cache"
+    php artisan view:clear"
+restore_web_permissions
 
 # Step 5: workers
 echo -e "${BLUE}[5/5]${NC} Restarting workers..."
