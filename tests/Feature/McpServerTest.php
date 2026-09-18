@@ -224,6 +224,90 @@ final class McpServerTest extends TestCase
     }
 
     /**
+     * Batches come from the free-text position field, so two spellings of one
+     * cohort are possible. They must stay separate in the figures and be
+     * flagged, never silently merged.
+     */
+    public function test_batch_report_groups_by_position_and_flags_near_duplicates(): void
+    {
+        $admin = $this->user('admin');
+
+        $type    = LeaveType::create(['name' => 'Vacation Leave', 'code' => 'VL' . random_int(100, 999)]);
+        $empType = EmployeeType::create(['name' => 'Apprentice']);
+        $year    = \App\Models\SystemSetting::getFinancialYear();
+
+        foreach ([['AIAP22-6M', 3.0], ['AIAP22_6M', 1.0], ['AIAP100', 0.0]] as [$batch, $used]) {
+            $account = $this->user('employee');
+
+            $employee = Employee::create([
+                'user_id'          => $account->id,
+                'employee_number'  => 'E' . $account->id,
+                'employee_type_id' => $empType->id,
+                'position'         => $batch,
+                'hire_date'        => now()->subYear(),
+            ]);
+
+            \App\Models\EmployeeLeaveBalance::create([
+                'employee_id'    => $employee->id,
+                'leave_type_id'  => $type->id,
+                'financial_year' => $year,
+                'entitled_days'  => 10,
+                'used_days'      => $used,
+                'pending_days'   => 0,
+            ]);
+        }
+
+        $data = $this->rpc($this->keyFor($admin), [
+            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
+            'params'  => ['name' => 'batch_leave_summary_report', 'arguments' => ['leave_type_id' => $type->id]],
+        ])->assertOk()->json('result.structuredContent');
+
+        $byBatch = collect($data['batches'])->keyBy('batch');
+
+        $this->assertCount(3, $data['batches'], 'the two spellings must not be merged');
+        $this->assertEquals(3, $byBatch['AIAP22-6M']['totals']['taken']);
+        $this->assertEquals(7, $byBatch['AIAP22-6M']['totals']['available']);
+        $this->assertEquals(0, $byBatch['AIAP100']['totals']['taken']);
+
+        $this->assertSame(
+            [['AIAP22-6M', 'AIAP22_6M']],
+            $data['possible_duplicate_batches']
+        );
+    }
+
+    public function test_batch_report_names_an_apprentice_with_no_position(): void
+    {
+        $admin   = $this->user('admin');
+        $type    = LeaveType::create(['name' => 'Vacation Leave', 'code' => 'VL' . random_int(100, 999)]);
+        $empType = EmployeeType::create(['name' => 'Apprentice']);
+        $account = $this->user('employee');
+
+        $employee = Employee::create([
+            'user_id'          => $account->id,
+            'employee_number'  => 'E' . $account->id,
+            'employee_type_id' => $empType->id,
+            'position'         => null,
+            'hire_date'        => now()->subYear(),
+        ]);
+
+        \App\Models\EmployeeLeaveBalance::create([
+            'employee_id'    => $employee->id,
+            'leave_type_id'  => $type->id,
+            'financial_year' => \App\Models\SystemSetting::getFinancialYear(),
+            'entitled_days'  => 10,
+            'used_days'      => 0,
+            'pending_days'   => 0,
+        ]);
+
+        $data = $this->rpc($this->keyFor($admin), [
+            'jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/call',
+            'params'  => ['name' => 'batch_leave_summary_report', 'arguments' => []],
+        ])->assertOk()->json('result.structuredContent');
+
+        $this->assertSame('(no batch set)', $data['batches'][0]['batch']);
+    }
+
+    /**
      * Create $count approved single-day leave requests in the current year.
      */
     private function seedLeave(int $count): void

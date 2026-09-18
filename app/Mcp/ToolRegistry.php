@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Mcp;
 
 use App\Mcp\Contracts\McpTool;
+use App\Mcp\Tools\Reports\BatchLeaveSummaryTool;
 use App\Mcp\Tools\Reports\DepartmentSummaryTool;
 use App\Mcp\Tools\Reports\EmployeeBalanceTool;
 use App\Mcp\Tools\Reports\LeaveSummaryTool;
@@ -33,6 +34,7 @@ final class ToolRegistry
         DepartmentSummaryTool::class,
         EmployeeBalanceTool::class,
         LeaveTypeBreakdownTool::class,
+        BatchLeaveSummaryTool::class,
         ListDepartmentsTool::class,
         ListLeaveTypesTool::class,
 
