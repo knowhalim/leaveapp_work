@@ -193,6 +193,10 @@ RSYNC_EXCLUDES=(
     --exclude='bootstrap/cache' --exclude='public/build' --exclude='public/hot'
     --exclude='public/storage' --exclude='storage/app/public' --exclude='storage/logs'
     --exclude='storage/pail' --exclude='storage/framework/cache/data'
+    # Built bundles are per-deployment artifacts: the server rebuilds its own
+    # with its own URL. Syncing them would push a locally-built bundle onto
+    # every server, and a bundle built with a key baked in is a credential.
+    --exclude='storage/app/mcpb'
     --exclude='storage/framework/sessions' --exclude='storage/framework/views'
     --exclude='.phpunit.cache' --exclude='.idea' --exclude='.vscode' --exclude='.claude'
 )
