@@ -308,6 +308,70 @@ final class McpServerTest extends TestCase
     }
 
     /**
+     * Admins manage their own MCP access. They can already call every tool, so
+     * issuing their own key grants no new data access — and it avoids a super
+     * admin handing over a key that acts as *them*.
+     */
+    public function test_an_admin_gets_the_two_step_page_and_only_their_own_keys(): void
+    {
+        $superAdmin = $this->user('super_admin');
+        $admin      = $this->user('admin');
+
+        $this->keyFor($superAdmin);
+        $this->keyFor($admin);
+
+        $this->actingAs($admin)->get('/settings/mcp')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Settings/McpSelf')
+                ->where('is_super_admin', false)
+                ->has('keys', 1));
+
+        $this->actingAs($superAdmin)->get('/settings/mcp')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Settings/Mcp')
+                ->where('is_super_admin', true)
+                ->has('keys', 2));
+    }
+
+    public function test_an_admin_cannot_touch_another_persons_key(): void
+    {
+        $superAdmin = $this->user('super_admin');
+        $admin      = $this->user('admin');
+
+        $this->keyFor($superAdmin);
+        $foreignKey = ApiKey::where('user_id', $superAdmin->id)->firstOrFail();
+
+        // Baking someone else's key into a downloadable file would hand over
+        // their access wholesale.
+        $this->actingAs($admin)->get('/settings/mcp/bundle?key=' . $foreignKey->id)->assertForbidden();
+        $this->actingAs($admin)->delete('/settings/mcp/keys/' . $foreignKey->id)->assertForbidden();
+
+        $this->assertDatabaseHas('api_keys', ['id' => $foreignKey->id]);
+    }
+
+    public function test_only_a_super_admin_can_rename_the_connection(): void
+    {
+        // One deployment presents one identity to every client, so naming is
+        // not a per-admin preference.
+        $this->actingAs($this->user('admin'))
+            ->post('/settings/mcp/connector', ['connector_name' => 'hijacked'])
+            ->assertForbidden();
+
+        $this->actingAs($this->user('super_admin'))
+            ->post('/settings/mcp/connector', ['connector_name' => 'renamed-ok'])
+            ->assertRedirect();
+
+        $this->assertSame('renamed-ok', \App\Mcp\ConnectorName::get());
+    }
+
+    public function test_a_manager_still_cannot_reach_the_mcp_settings_page(): void
+    {
+        $this->actingAs($this->user('manager'))->get('/settings/mcp')->assertForbidden();
+    }
+
+    /**
      * Create $count approved single-day leave requests in the current year.
      */
     private function seedLeave(int $count): void

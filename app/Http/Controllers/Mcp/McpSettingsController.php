@@ -36,6 +36,11 @@ final class McpSettingsController extends Controller
     {
         $user = $request->user();
 
+        // Super admins run the connection; admins just need a key and a file.
+        // Two screens rather than one screen with half of it hidden, because
+        // the admin flow is genuinely a different, shorter task.
+        $isSuperAdmin = $user->isSuperAdmin();
+
         $tools = [];
         foreach ($this->registry->visibleTo($user) as $tool) {
             $tools[] = [
@@ -48,7 +53,7 @@ final class McpSettingsController extends Controller
 
         $appUrl = (string) config('app.url');
 
-        return Inertia::render('Admin/Settings/Mcp', [
+        return Inertia::render($isSuperAdmin ? 'Admin/Settings/Mcp' : 'Admin/Settings/McpSelf', [
             'connector' => [
                 'name'         => ConnectorName::get(),
                 'stored'       => ConnectorName::stored(),
@@ -64,9 +69,14 @@ final class McpSettingsController extends Controller
                 ? "APP_URL is set to {$appUrl}. Bundles generated now will only work on the server itself — set APP_URL to the public address first."
                 : null,
             'tools' => $tools,
+            'is_super_admin' => $isSuperAdmin,
+            // An admin sees only their own keys: someone else's key is not
+            // theirs to revoke, and listing it tells them who else is
+            // connected, which is not their business either.
             'keys'  => ApiKey::query()
                 ->with('user')
                 ->whereJsonContains('permissions', 'mcp.use')
+                ->when(!$isSuperAdmin, fn ($q) => $q->where('user_id', $user->id))
                 ->orderByDesc('created_at')
                 ->get()
                 ->map(fn (ApiKey $k) => [
@@ -138,6 +148,10 @@ final class McpSettingsController extends Controller
             return back()->with('error', 'That key does not belong to the MCP server.');
         }
 
+        if (!$request->user()->isSuperAdmin() && $apiKey->user_id !== $request->user()->id) {
+            abort(403, 'You can only revoke your own MCP keys.');
+        }
+
         $apiKey->delete();
 
         ActivityLog::log('settings.mcp_key_revoked', null, ['key_name' => $apiKey->name]);
@@ -161,6 +175,12 @@ final class McpSettingsController extends Controller
 
             if (!$bakedKey || !$bakedKey->hasPermission('mcp.use')) {
                 abort(404, 'That MCP key does not exist.');
+            }
+
+            // Baking someone else's key into a file you download would hand you
+            // their access, so an admin may only bake their own.
+            if (!$request->user()->isSuperAdmin() && $bakedKey->user_id !== $request->user()->id) {
+                abort(403, 'You can only download a bundle containing your own key.');
             }
 
             // Baking a key that is already dead produces a bundle that cannot
